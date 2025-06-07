@@ -8,6 +8,7 @@ export default [
 	{
 		input: "src/index.ts",
 		output: { file: "dist/index.esm.js", format: "esm" },
+		external: /node:.+/,
 
 		plugins: [
 			deletePlugin({ targets: "dist", runOnce: true }),
@@ -21,6 +22,7 @@ export default [
 	{
 		input: "src/index.ts",
 		output: { file: "dist/index.js", format: "cjs" },
+		external: /node:.+/,
 
 		plugins: [
 			ts2Plugin({ useTsconfigDeclarationDir: true }),
@@ -32,6 +34,7 @@ export default [
 	{
 		input: "dist/types/index.d.ts",
 		output: [{ file: "dist/index.d.ts", format: "es" }],
+		external: /node:.+/,
 
 		plugins: [dtsPlugin()],
 
