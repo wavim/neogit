@@ -1,9 +1,11 @@
 import { Buffer } from "node:buffer";
 import { hash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { deflate } from "node:zlib";
+
+import { GitArg, RawData } from "../../types";
 
 export enum ObjectType {
 	blob,
@@ -22,21 +24,25 @@ export class GitObject {
 		dir,
 		type,
 		content,
-	}: {
-		dir: string;
-		type: ObjectType;
-		content: Buffer;
-	}): Promise<GitObject> {
+	}: GitArg<{ type: ObjectType; content: RawData }>): Promise<GitObject> {
+		const buffer = Buffer.isBuffer(content)
+			? content
+			: Buffer.from(content);
 		const header = Buffer.from(
-			`${ObjectType[type]} ${content.byteLength}\0`,
+			`${ObjectType[type]} ${buffer.byteLength}\0`,
 		);
-		const payload = Buffer.concat([header, content]);
+		const payload = Buffer.concat([header, buffer]);
 
 		const sha1 = hash("sha1", payload, "hex");
-		const data = await promisify(deflate)(payload);
+		const data = await promisify(deflate)(payload, { level: 1 });
 
-		const path = `${dir}/.git/objects/${sha1.slice(0, 2)}/${sha1.slice(2)}`;
-
+		const path = join(
+			dir,
+			".git",
+			"objects",
+			sha1.slice(0, 2),
+			sha1.slice(2),
+		);
 		await mkdir(dirname(path), { recursive: true });
 		await writeFile(path, data, { flag: "wx" });
 
