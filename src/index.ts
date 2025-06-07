@@ -1,1 +1,1 @@
-console.log("Hello World");
+export { GitObject } from "./models/objects/object";
