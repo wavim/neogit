@@ -4,10 +4,7 @@
 		{
 			"type": "npm",
 			"script": "build",
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
+			"group": { "kind": "build", "isDefault": true },
 			"label": "build",
 			"presentation": {
 				"clear": true,
@@ -30,13 +27,9 @@
 		},
 		{
 			"type": "npm",
-			"script": "list",
-			"label": "list",
-			"presentation": {
-				"clear": true,
-				"panel": "dedicated",
-				"showReuseMessage": false
-			}
+			"script": "lint",
+			"label": "lint",
+			"presentation": { "clear": true, "panel": "dedicated" }
 		}
 	]
 }
