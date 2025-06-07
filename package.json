@@ -1,12 +1,12 @@
 {
-	"name": "f-git",
+	"name": "gfit",
 	"author": "CarbonicSoda",
 	"version": "0.0.0-reserve",
 	"description": "Git isometry with a negotiable F",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/CarbonicSoda/"
+		"url": "https://github.com/CarbonicSoda/gfit"
 	},
 	"keywords": [],
 	"type": "module",

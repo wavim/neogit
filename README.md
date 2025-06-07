@@ -1,9 +1,8 @@
 <h3 align="center">
-	<!-- MO TODO dont forget to replace alt -->
-	<img src="https://raw.githubusercontent.com/CarbonicSoda//master/media/icon.png" width="130" alt="Icon" /><br />
-
+	<img src="https://raw.githubusercontent.com/CarbonicSoda/gfit/master/media/icon.png" width="130" alt="GFit Icon" /><br />
+	GFit
 </h3>
-<p align="center"></p>
+<h4 align="center">Git isometry with a negotiable F</h4>
 
 ---
 
@@ -13,13 +12,13 @@ Install this package in your project:
 
 ```bash
 # via npm
-npm add
+npm add gfit
 
 # or pnpm
-pnpm add
+pnpm add gfit
 
 # or yarn
-yarn add
+yarn add gfit
 ```
 
 ---
