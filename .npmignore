@@ -1,0 +1,7 @@
+.vscode/
+media/
+src/
+
+.prettierrc
+rollup.config.mjs
+tsconfig.json
