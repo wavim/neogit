@@ -1,5 +1,5 @@
 {
-	"include": ["src"],
+	"include": ["src/**/*"],
 
 	"compilerOptions": {
 		"strict": true,
@@ -15,8 +15,6 @@
 		"noEmit": true,
 		"sourceMap": true,
 		"declaration": true,
-		"declarationDir": "./dist/types",
-
-		"noFallthroughCasesInSwitch": true
+		"declarationDir": "./dist/types"
 	}
 }
