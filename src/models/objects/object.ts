@@ -1,7 +1,9 @@
-import fs from "node:fs/promises";
-
 import { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { promisify } from "node:util";
+import { deflate } from "node:zlib";
 
 export enum ObjectType {
 	blob,
@@ -28,14 +30,17 @@ export class GitObject {
 		const header = Buffer.from(
 			`${ObjectType[type]} ${content.byteLength}\0`,
 		);
-		const data = Buffer.concat([header, content]);
+		const payload = Buffer.concat([header, content]);
 
-		const hash = createHash("sha1").update(data).digest("hex");
+		const sha1 = hash("sha1", payload, "hex");
+		const data = await promisify(deflate)(payload);
 
-		const path = `${dir}/.git/objects/${hash.slice(0, 2)}/${hash.slice(2)}`;
-		await fs.writeFile(path, data);
+		const path = `${dir}/.git/objects/${sha1.slice(0, 2)}/${sha1.slice(2)}`;
 
-		const object = new GitObject(type, hash);
+		await mkdir(dirname(path), { recursive: true });
+		await writeFile(path, data, { flag: "wx" });
+
+		const object = new GitObject(type, sha1);
 
 		return object;
 	}
