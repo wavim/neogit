@@ -1,8 +1,8 @@
 <h3 align="center">
-	<img src="https://raw.githubusercontent.com/CarbonicSoda/fgt/master/media/icon.png" width="130" alt="FGt Icon" /><br />
-	FGt
+	<img src="https://raw.githubusercontent.com/CarbonicSoda/neogit/master/media/icon.png" width="130" alt="NeoGit Icon" /><br />
+	NeoGit
 </h3>
-<h4 align="center">Git isometry with a negotiable F</h4>
+<h4 align="center">Git Isometry for Node.js</h4>
 
 ---
 
@@ -12,13 +12,13 @@ Install this package in your project:
 
 ```bash
 # via npm
-npm add fgt
+npm add neogit
 
 # or pnpm
-pnpm add fgt
+pnpm add neogit
 
 # or yarn
-yarn add fgt
+yarn add neogit
 ```
 
 ---

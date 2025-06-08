@@ -1,12 +1,12 @@
 {
-	"name": "fgt",
+	"name": "neogit",
 	"author": "CarbonicSoda",
 	"version": "0.0.0-reserve",
-	"description": "Git isometry with a negotiable F",
+	"description": "Git Isometry for Node.js",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/CarbonicSoda/fgt"
+		"url": "https://github.com/CarbonicSoda/neogit"
 	},
 	"keywords": [],
 	"type": "module",
