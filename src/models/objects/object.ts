@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { deflate } from "node:zlib";
 
+import { err, errno } from "ts-errno";
+
 import { GitArg, RawData } from "../../types";
 
 export enum ObjectType {
@@ -44,7 +46,11 @@ export class GitObject {
 			sha1.slice(2),
 		);
 		await mkdir(dirname(path), { recursive: true });
-		await writeFile(path, data, { flag: "wx" });
+		try {
+			await writeFile(path, data, { flag: "wx" });
+		} catch (error) {
+			throw err(errno.EEXIST, error)`Git object ${sha1} is immutable.`;
+		}
 
 		const object = new GitObject(type, sha1);
 

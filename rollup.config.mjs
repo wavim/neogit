@@ -1,5 +1,6 @@
 import deletePlugin from "rollup-plugin-delete";
 
+import resolvePlugin from "@rollup/plugin-node-resolve";
 import terserPlugin from "@rollup/plugin-terser";
 import dtsPlugin from "rollup-plugin-dts";
 import ts2Plugin from "rollup-plugin-typescript2";
@@ -14,6 +15,7 @@ export default [
 			deletePlugin({ targets: "dist", runOnce: true }),
 
 			ts2Plugin({ useTsconfigDeclarationDir: true }),
+			resolvePlugin(),
 			terserPlugin(),
 		],
 
@@ -26,6 +28,7 @@ export default [
 
 		plugins: [
 			ts2Plugin({ useTsconfigDeclarationDir: true }),
+			resolvePlugin(),
 			terserPlugin(),
 		],
 

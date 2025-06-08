@@ -26,8 +26,12 @@
 		"lint": "eslint",
 		"list": "npm pack --dry-run --json"
 	},
+	"dependencies": {
+		"ts-errno": "^1.0.1"
+	},
 	"devDependencies": {
 		"@eslint/js": "^9.28.0",
+		"@rollup/plugin-node-resolve": "^16.0.1",
 		"@rollup/plugin-terser": "^0.4.4",
 		"@stylistic/eslint-plugin": "^4.4.1",
 		"@types/node": "^22.15.30",
