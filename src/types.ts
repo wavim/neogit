@@ -1,11 +1,7 @@
-import { Buffer } from "node:buffer";
-
-import { GitObject } from "./objects/object";
-
-export type RawData = Parameters<typeof Buffer.from>[0];
+import { type GitObject } from "./objects/object/object";
 
 export interface Cache {
-	objects: Record<string, GitObject>;
+	objects?: Record<string, GitObject>;
 }
 
 export type GitArg<T extends Record<string, unknown>> = {
