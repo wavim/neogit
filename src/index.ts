@@ -1,1 +1,1 @@
-export { GitObject, ObjectType } from "./models/objects/object";
+export { GitObject, ObjectType } from "./objects/object";

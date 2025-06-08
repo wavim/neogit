@@ -7,7 +7,7 @@ import { deflate } from "node:zlib";
 
 import { err, errno } from "ts-errno";
 
-import { GitArg, RawData } from "../../types";
+import { GitArg, RawData } from "../types";
 
 export enum ObjectType {
 	blob,
@@ -32,28 +32,29 @@ export class GitObject {
 			: Buffer.from(content);
 		const header = Buffer.from(
 			`${ObjectType[type]} ${buffer.byteLength}\0`,
+			"ascii",
 		);
 		const payload = Buffer.concat([header, buffer]);
 
 		const sha1 = hash("sha1", payload, "hex");
 		const data = await promisify(deflate)(payload, { level: 1 });
 
-		const path = join(
+		const loosePath = join(
 			dir,
 			".git",
 			"objects",
 			sha1.slice(0, 2),
 			sha1.slice(2),
 		);
-		await mkdir(dirname(path), { recursive: true });
+		await mkdir(dirname(loosePath), { recursive: true });
 		try {
-			await writeFile(path, data, { flag: "wx" });
-		} catch (error) {
-			throw err(errno.EEXIST, error)`Git object ${sha1} is immutable.`;
+			await writeFile(loosePath, data, { flag: "wx" });
+		} catch (e) {
+			throw err(errno.EEXIST, e)`Git object ${sha1} is immutable.`;
 		}
 
-		const object = new GitObject(type, sha1);
+		const looseObject = new GitObject(type, sha1);
 
-		return object;
+		return looseObject;
 	}
 }
