@@ -7,14 +7,8 @@ import { deflate } from "node:zlib";
 
 import { err, errno } from "ts-errno";
 
+import { ObjectType } from "../enums";
 import { GitArg, RawData } from "../types";
-
-export enum ObjectType {
-	blob,
-	tree,
-	commit,
-	tag,
-}
 
 export class GitObject {
 	constructor(
