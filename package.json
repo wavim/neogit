@@ -27,7 +27,7 @@
 		"list": "npm pack --dry-run --json"
 	},
 	"dependencies": {
-		"ts-errno": "^1.2.2"
+		"ts-errno": "^2.0.0"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.28.0",
