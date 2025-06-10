@@ -59,7 +59,7 @@ async function readPacked(base: Base): Promise<Buffer> {
 		const fanout = packidx.subarray(2 * 4, 2 * 4 + 256 * 4);
 		const fanidx = +`0x${base.hash.slice(0, 2)}`;
 
-		lower = fanout.readUInt32BE((fanidx - 1) * 4);
+		lower = fanidx > 0 ? fanout.readUInt32BE((fanidx - 1) * 4) : 0;
 		upper = fanout.readUInt32BE(fanidx * 4);
 
 		if (lower < upper) {
@@ -77,6 +77,7 @@ async function readPacked(base: Base): Promise<Buffer> {
 		2 * 4 + 256 * 4 + nobjs * 20,
 	);
 
+	upper--;
 	const target = Buffer.from(base.hash, "hex");
 
 	while (lower <= upper) {
@@ -97,6 +98,10 @@ async function readPacked(base: Base): Promise<Buffer> {
 		}
 
 		break;
+	}
+
+	if (lower > upper) {
+		throw new Error();
 	}
 
 	const offsetmap = packidx.subarray(
