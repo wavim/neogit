@@ -42,7 +42,7 @@ async function readLoose(base: Base): Promise<Buffer> {
 async function readPacked(base: Base): Promise<Buffer> {
 	const packdir = join(base.repo, ".git", "objects", "pack");
 
-	let packidx!: Buffer;
+	let packidx;
 
 	let lower = 0;
 	let upper = 0;
@@ -96,7 +96,6 @@ async function readPacked(base: Base): Promise<Buffer> {
 				continue;
 			}
 		}
-
 		break;
 	}
 
