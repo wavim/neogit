@@ -1,1 +1,1 @@
-export { GitObjectType, type GitObject } from "./objects/object/object";
+export * as Base from "./objects/Base";

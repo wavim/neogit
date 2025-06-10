@@ -16,7 +16,9 @@ export default [
 
 			ts2Plugin({ useTsconfigDeclarationDir: true }),
 			resolvePlugin(),
-			terserPlugin(),
+
+			// safe for ECMA compliant code
+			terserPlugin({ compress: { unsafe: true } }),
 		],
 
 		watch: true,
@@ -29,7 +31,9 @@ export default [
 		plugins: [
 			ts2Plugin({ useTsconfigDeclarationDir: true }),
 			resolvePlugin(),
-			terserPlugin(),
+
+			// safe for ECMA compliant code
+			terserPlugin({ compress: { unsafe: true } }),
 		],
 
 		watch: false,
