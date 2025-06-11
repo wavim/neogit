@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { readdir, readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { inflate } from "node:zlib";
 
@@ -9,15 +9,15 @@ export interface Base {
 	hash: string;
 }
 
-export async function read(base: Base): Promise<Buffer> {
+export async function readObj(obj: Base): Promise<Buffer> {
 	try {
-		return await readLoose(base);
+		return await readLoose(obj);
 	} catch {
 		/* empty */
 	}
 
 	try {
-		return await readPacked(base);
+		return await readPacked(obj);
 	} catch {
 		/* empty */
 	}
@@ -25,13 +25,13 @@ export async function read(base: Base): Promise<Buffer> {
 	throw new Error("could not get object info");
 }
 
-async function readLoose(base: Base): Promise<Buffer> {
+async function readLoose(obj: Base): Promise<Buffer> {
 	const objpath = join(
-		base.repo,
+		obj.repo,
 		".git",
 		"objects",
-		base.hash.slice(0, 2),
-		base.hash.slice(2),
+		obj.hash.slice(0, 2),
+		obj.hash.slice(2),
 	);
 	const rawdata = await readFile(objpath);
 	const payload = await promisify(inflate)(rawdata);
@@ -39,10 +39,12 @@ async function readLoose(base: Base): Promise<Buffer> {
 	return payload;
 }
 
-async function readPacked(base: Base): Promise<Buffer> {
-	const packdir = join(base.repo, ".git", "objects", "pack");
+async function readPacked(obj: Base): Promise<Buffer> {
+	const packdir = join(obj.repo, ".git", "objects", "pack");
 
-	let packidx;
+	let idx;
+
+	let packpath;
 
 	let lower = 0;
 	let upper = 0;
@@ -54,36 +56,36 @@ async function readPacked(base: Base): Promise<Buffer> {
 		}
 
 		const idxpath = join(packdir, path);
-		packidx = await readFile(idxpath);
+		idx = await readFile(idxpath);
 
-		const fanout = packidx.subarray(2 * 4, 2 * 4 + 256 * 4);
-		const fanidx = +`0x${base.hash.slice(0, 2)}`;
+		const fanidx = +`0x${obj.hash.slice(0, 2)}`;
+		const fanout = idx.subarray(2 * 4, 2 * 4 + 256 * 4);
 
 		lower = fanidx > 0 ? fanout.readUInt32BE((fanidx - 1) * 4) : 0;
 		upper = fanout.readUInt32BE(fanidx * 4);
 
 		if (lower < upper) {
+			packpath = join(packdir, basename(path, ".idx") + ".pack");
+
 			nobjs = fanout.readUInt32BE(255 * 4);
+
 			break;
 		}
 	}
 
-	if (!packidx || lower === upper) {
+	if (!idx || !packpath) {
 		throw new Error();
 	}
 
-	const objlist = packidx.subarray(
-		2 * 4 + 256 * 4,
-		2 * 4 + 256 * 4 + nobjs * 20,
-	);
+	const shalist = idx.subarray(2 * 4 + 256 * 4, 2 * 4 + 256 * 4 + nobjs * 20);
 
 	upper--;
-	const target = Buffer.from(base.hash, "hex");
+	const target = Buffer.from(obj.hash, "hex");
 
 	while (lower <= upper) {
 		const mid = Math.floor((lower + upper) / 2);
 
-		switch (target.compare(objlist, mid * 20, mid * 20 + 20)) {
+		switch (target.compare(shalist, mid * 20, mid * 20 + 20)) {
 			case 1: {
 				lower = mid + 1;
 				continue;
@@ -103,15 +105,61 @@ async function readPacked(base: Base): Promise<Buffer> {
 		throw new Error();
 	}
 
-	const offsetmap = packidx.subarray(
+	const ofs32idx = lower;
+	const ofs32map = idx.subarray(
 		2 * 4 + 256 * 4 + nobjs * 20 + nobjs * 4,
 		2 * 4 + 256 * 4 + nobjs * 20 + nobjs * 4 + nobjs * 4,
 	);
-	const offsetidx = lower;
 
-	const offset = offsetmap.readUInt32BE(offsetidx * 4);
+	let offset = ofs32map.readUInt32BE(ofs32idx * 4);
 
-	console.log(offset);
+	if (offset & 0x80_00_00_00) {
+		const ofs64idx = offset & 0x7f_ff_ff_ff;
+		const ofs64map = idx.subarray(
+			2 * 4 + 256 * 4 + nobjs * 20 + nobjs * 4 + nobjs * 4,
+			-(20 + 20),
+		);
 
-	throw new Error("not implemented");
+		const offset64 = ofs64map.readBigUInt64BE(ofs64idx * 8);
+
+		if (offset64 > Number.MAX_SAFE_INTEGER) {
+			throw new Error();
+		}
+
+		offset = Number(offset64);
+	}
+
+	const pack = await readFile(packpath);
+
+	let byte = pack.readUint8(offset++);
+
+	const type = [
+		"invalid",
+		"commit",
+		"tree",
+		"blob",
+		"tag",
+		"reserved",
+		"ofs-delta",
+		"ref-delta",
+	][(byte >> 4) & 0b0111];
+
+	let size = byte & 0b1111;
+	let shift = 4;
+
+	while (byte & 0x80) {
+		byte = pack.readUint8(offset++);
+
+		size |= (byte & 0x7f) << shift;
+		shift += 7;
+	}
+
+	const header = Buffer.from(`${type} ${size.toFixed()}\0`, "ascii");
+
+	const rawdata = pack.subarray(offset);
+	const content = await promisify(inflate)(rawdata);
+
+	const payload = Buffer.concat([header, content]);
+
+	return payload;
 }
