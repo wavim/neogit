@@ -1,1 +1,1 @@
-export * as Base from "./objects/Base";
+export * as Object from "./objects/object";
