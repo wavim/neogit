@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { FileHandle, open, readdir, readFile } from "node:fs/promises";
+import { open, readdir, readFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { createInflate, inflate } from "node:zlib";
@@ -33,10 +33,11 @@ async function readLooseObject(object: Object): Promise<Buffer> {
 		object.hash.slice(0, 2),
 		object.hash.slice(2),
 	);
+
 	const deflatedPayload = await readFile(objectPath);
 	const payload = await promisify(inflate)(deflatedPayload);
 
-	return payload;
+	return readObjectBody(payload);
 }
 
 async function readIndexedObject(object: Object): Promise<Buffer> {
@@ -124,25 +125,11 @@ async function readIndexedObject(object: Object): Promise<Buffer> {
 		offset = Number(offset64);
 	}
 
-	const pack = await open(packPath);
-
-	return await readPackedObject(pack, offset);
+	return await readPackedObject(object.repo, packPath, offset);
 }
 
-async function readPackedObject(pack: FileHandle, offset: number): Promise<Buffer> {
-	const readMSBitEncode = (buffer: Buffer, pointer: { next: number }) => {
-		let byte = 0;
-		let value = 0;
-		let shift = 0;
-
-		do {
-			byte = buffer.readUint8(pointer.next++);
-			value |= (byte & 0x7f) << shift;
-			shift += 7;
-		} while (byte & 0x80);
-
-		return value;
-	};
+async function readPackedObject(repo: string, packPath: string, offset: number): Promise<Buffer> {
+	const pack = await open(packPath);
 
 	const objectEntry = Buffer.alloc(5);
 	const objectEntryPointer = { next: 0 };
@@ -168,26 +155,141 @@ async function readPackedObject(pack: FileHandle, offset: number): Promise<Buffe
 		throw new Error();
 	}
 
-	const objectLength =
-		(firstByte & 0b1111) + (readMSBitEncode(objectEntry, objectEntryPointer) << 4);
+	readVariableSize(objectEntry, objectEntryPointer);
 
 	if (objectType !== "ofs-delta" && objectType !== "ref-delta") {
-		const header = Buffer.from(`${objectType} ${objectLength.toFixed()}\0`, "ascii");
-
-		const contentStream = pack.createReadStream({
-			start: offset + objectEntryPointer.next,
-		});
-		const inflateStream = contentStream.pipe(createInflate());
-
-		const contentChunks = await Array.fromAsync<Buffer>(inflateStream);
-
-		contentStream.destroy();
-		inflateStream.destroy();
-
-		const payload = Buffer.concat([header, ...contentChunks]);
-
-		return payload;
+		return await readInflated(packPath, offset + objectEntryPointer.next);
 	}
 
-	throw new Error("not implemented");
+	let deltaBase;
+	const deltaEntryPointer = { next: 0 };
+
+	if (objectType === "ofs-delta") {
+		const deltaEntry = Buffer.alloc(8);
+		await pack.read({ buffer: deltaEntry, position: offset + objectEntryPointer.next });
+		const deltaBaseOffset = readVariableOffset(deltaEntry, deltaEntryPointer);
+
+		deltaBase = await readPackedObject(repo, packPath, offset - deltaBaseOffset);
+	} else {
+		const deltaEntry = await pack.read({
+			buffer: Buffer.alloc(20),
+			position: offset + objectEntryPointer.next,
+		});
+		deltaEntryPointer.next += 20;
+
+		deltaBase = await readIndexedObject({
+			repo,
+			hash: deltaEntry.buffer.toString("hex"),
+		});
+	}
+
+	const deltaData = await readInflated(
+		packPath,
+		offset + objectEntryPointer.next + deltaEntryPointer.next,
+	);
+	const deltaDataPointer = { next: 0 };
+
+	readVariableSize(deltaData, deltaDataPointer);
+	readVariableSize(deltaData, deltaDataPointer);
+
+	const deltaCommands = deltaData.subarray(deltaDataPointer.next);
+
+	return Buffer.concat(constructDeltas(deltaBase, deltaCommands));
+}
+
+function constructDeltas(deltaBase: Buffer, commands: Buffer, deltas: Buffer[] = []): Buffer[] {
+	if (commands.byteLength === 0) {
+		return deltas;
+	}
+
+	const instruction = commands.readUInt8(0);
+
+	if ((instruction & 0x80) === 0) {
+		const dataSize = instruction & 0x7f;
+
+		const delta = commands.subarray(1, dataSize + 1);
+		deltas.push(delta);
+
+		return constructDeltas(deltaBase, commands.subarray(dataSize + 1), deltas);
+	}
+
+	const byteMask = instruction & 0x7f;
+	let byteIndex = 1;
+
+	let copyOffset = 0;
+	let copyOffsetShift = 0;
+
+	for (let i = 0; i < 4; i++) {
+		const exists = (byteMask >> i) & 1;
+		copyOffset |= exists ? commands.readUInt8(byteIndex++) << copyOffsetShift : 0;
+		copyOffsetShift += 8;
+	}
+
+	let copySize = 0;
+	let copySizeShift = 0;
+
+	for (let i = 4; i < 7; i++) {
+		const exists = (byteMask >> i) & 1;
+		copySize |= exists ? commands.readUInt8(byteIndex++) << copySizeShift : 0;
+		copySizeShift += 8;
+	}
+
+	const delta = deltaBase.subarray(copyOffset, copyOffset + copySize);
+	deltas.push(delta);
+
+	return constructDeltas(deltaBase, commands.subarray(byteIndex), deltas);
+}
+
+function readObjectBody(payload: Buffer): Buffer {
+	const nullIndex = payload.indexOf(0);
+
+	return payload.subarray(nullIndex + 1);
+}
+
+function readVariableSize(buffer: Buffer, pointer: { next: number }): number {
+	let byte = 0;
+	let value = 0;
+	let shift = 0;
+
+	do {
+		byte = buffer.readUint8(pointer.next++);
+		value |= (byte & 0x7f) << shift;
+		shift += 7;
+	} while (byte & 0x80);
+
+	return value;
+}
+
+function readVariableOffset(buffer: Buffer, pointer: { next: number }): number {
+	let byte = 0;
+	let value = 0;
+
+	let multiByte = false;
+
+	do {
+		if (multiByte) {
+			value++;
+		}
+
+		byte = buffer.readUint8(pointer.next++);
+		value = (value << 7) | (byte & 0x7f);
+
+		multiByte = true;
+	} while (byte & 0x80);
+
+	return value;
+}
+
+async function readInflated(packPath: string, offset: number): Promise<Buffer> {
+	const pack = await open(packPath);
+
+	const contentStream = pack.createReadStream({ start: offset });
+	const inflateStream = contentStream.pipe(createInflate());
+
+	const contentChunks = await Array.fromAsync<Buffer>(inflateStream);
+
+	contentStream.destroy();
+	inflateStream.destroy();
+
+	return Buffer.concat(contentChunks);
 }
