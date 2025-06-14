@@ -4,12 +4,12 @@ import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { createInflate, inflate } from "node:zlib";
 
-export interface Object {
+export interface GitObject {
 	repo: string;
 	hash: string;
 }
 
-export async function readObject(object: Object): Promise<Buffer> {
+export async function readObject(object: GitObject): Promise<Buffer> {
 	try {
 		return await readLooseObject(object);
 	} catch {
@@ -25,7 +25,7 @@ export async function readObject(object: Object): Promise<Buffer> {
 	throw new Error("could not get object info");
 }
 
-async function readLooseObject(object: Object): Promise<Buffer> {
+async function readLooseObject(object: GitObject): Promise<Buffer> {
 	const objectPath = join(
 		object.repo,
 		".git",
@@ -42,7 +42,7 @@ async function readLooseObject(object: Object): Promise<Buffer> {
 	return payload.subarray(nullIndex + 1);
 }
 
-async function readIndexedObject(object: Object): Promise<Buffer> {
+async function readIndexedObject(object: GitObject): Promise<Buffer> {
 	const packDir = join(object.repo, ".git", "objects", "pack");
 
 	let packIndex: Buffer | null = null;
@@ -157,10 +157,10 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 		throw new Error();
 	}
 
-	readVariableSize(objectEntry, objectEntryPointer);
+	readVariableLengthSize(objectEntry, objectEntryPointer);
 
 	if (objectType !== "ofs-delta" && objectType !== "ref-delta") {
-		return await readInflated(packPath, offset + objectEntryPointer.next);
+		return await readInflatedData(packPath, offset + objectEntryPointer.next);
 	}
 
 	let deltaBase;
@@ -171,7 +171,10 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 			buffer: Buffer.alloc(8),
 			position: offset + objectEntryPointer.next,
 		});
-		const deltaBaseOffset = readVariableOffset(deltaEntry.buffer, deltaEntryPointer);
+		const deltaBaseOffset = readVariableLengthOffset(
+			deltaEntry.buffer,
+			deltaEntryPointer,
+		);
 
 		deltaBase = await readPackedObject(repo, packPath, offset - deltaBaseOffset);
 	} else {
@@ -187,14 +190,14 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 		});
 	}
 
-	const deltaData = await readInflated(
+	const deltaData = await readInflatedData(
 		packPath,
 		offset + objectEntryPointer.next + deltaEntryPointer.next,
 	);
 	const deltaDataPointer = { next: 0 };
 
-	readVariableSize(deltaData, deltaDataPointer);
-	readVariableSize(deltaData, deltaDataPointer);
+	readVariableLengthSize(deltaData, deltaDataPointer);
+	readVariableLengthSize(deltaData, deltaDataPointer);
 
 	const deltaCommands = deltaData.subarray(deltaDataPointer.next);
 
@@ -244,24 +247,24 @@ function constructDeltas(deltaBase: Buffer, commands: Buffer, deltas: Buffer[] =
 	return constructDeltas(deltaBase, commands.subarray(byteIndex), deltas);
 }
 
-function readVariableSize(buffer: Buffer, pointer: { next: number }): number {
-	let byte = 0;
+function readVariableLengthSize(buffer: Buffer, pointer: { next: number }): number {
 	let value = 0;
+	let byte = 0;
 	let shift = 0;
 
 	do {
 		byte = buffer.readUint8(pointer.next++);
 		value |= (byte & 0x7f) << shift;
+
 		shift += 7;
 	} while (byte & 0x80);
 
 	return value;
 }
 
-function readVariableOffset(buffer: Buffer, pointer: { next: number }): number {
-	let byte = 0;
+function readVariableLengthOffset(buffer: Buffer, pointer: { next: number }): number {
 	let value = 0;
-
+	let byte = 0;
 	let multiByte = false;
 
 	do {
@@ -278,7 +281,7 @@ function readVariableOffset(buffer: Buffer, pointer: { next: number }): number {
 	return value;
 }
 
-async function readInflated(packPath: string, offset: number): Promise<Buffer> {
+async function readInflatedData(packPath: string, offset: number): Promise<Buffer> {
 	const pack = await open(packPath);
 
 	const contentStream = pack.createReadStream({ start: offset });
