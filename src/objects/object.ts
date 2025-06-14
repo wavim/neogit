@@ -143,7 +143,7 @@ async function readPackedObject(pack: FileHandle, offset: number): Promise<Buffe
 		return value;
 	};
 
-	const objectEntry = Buffer.alloc(6);
+	const objectEntry = Buffer.alloc(5);
 	const objectEntryPointer = { next: 0 };
 
 	await pack.read({ buffer: objectEntry, position: offset });
