@@ -81,9 +81,10 @@ async function readIndexedObject(object: Object): Promise<Buffer> {
 	const targetHash = Buffer.from(object.hash, "hex");
 
 	upperBound--;
+	let bisect = 0;
 
 	while (lowerBound <= upperBound) {
-		const bisect = Math.floor((lowerBound + upperBound) / 2);
+		bisect = Math.floor((lowerBound + upperBound) / 2);
 		const compare = targetHash.compare(hashTable, bisect * 20, bisect * 20 + 20);
 
 		if (compare === 0) {
@@ -104,7 +105,7 @@ async function readIndexedObject(object: Object): Promise<Buffer> {
 		2 * 4 + 256 * 4 + objectCount * 20 + objectCount * 4,
 		2 * 4 + 256 * 4 + objectCount * 20 + objectCount * 4 + objectCount * 4,
 	);
-	const offset32Index = lowerBound;
+	const offset32Index = bisect;
 
 	let offset = offset32Table.readUInt32BE(offset32Index * 4);
 
