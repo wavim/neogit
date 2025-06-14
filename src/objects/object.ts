@@ -9,20 +9,44 @@ export interface GitObject {
 	hash: string;
 }
 
-export async function readObject(object: GitObject): Promise<Buffer> {
+export interface Cache {
+	objects?: Map<string, Buffer>;
+}
+function getCacheKey(object: GitObject) {
+	return `${object.repo}:${object.hash}`;
+}
+
+export async function readObject(object: GitObject, cache?: Cache): Promise<Buffer> {
+	if (cache) {
+		cache.objects ??= new Map();
+
+		const cached = cache.objects.get(getCacheKey(object));
+		if (cached) {
+			return cached;
+		}
+	}
+
+	let data: Buffer | null = null;
+
 	try {
-		return await readLooseObject(object);
+		data = await readLooseObject(object);
 	} catch {
 		/* empty */
 	}
 
 	try {
-		return await readIndexedObject(object);
+		data = await readIndexedObject(object);
 	} catch {
 		/* empty */
 	}
 
-	throw new Error("could not get object info");
+	if (!data) {
+		throw new Error("could not get object info");
+	}
+
+	cache?.objects?.set(getCacheKey(object), data);
+
+	return data;
 }
 
 async function readLooseObject(object: GitObject): Promise<Buffer> {
