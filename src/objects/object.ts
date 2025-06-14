@@ -37,7 +37,9 @@ async function readLooseObject(object: Object): Promise<Buffer> {
 	const deflatedPayload = await readFile(objectPath);
 	const payload = await promisify(inflate)(deflatedPayload);
 
-	return readObjectBody(payload);
+	const nullIndex = payload.indexOf(0);
+
+	return payload.subarray(nullIndex + 1);
 }
 
 async function readIndexedObject(object: Object): Promise<Buffer> {
@@ -165,9 +167,11 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 	const deltaEntryPointer = { next: 0 };
 
 	if (objectType === "ofs-delta") {
-		const deltaEntry = Buffer.alloc(8);
-		await pack.read({ buffer: deltaEntry, position: offset + objectEntryPointer.next });
-		const deltaBaseOffset = readVariableOffset(deltaEntry, deltaEntryPointer);
+		const deltaEntry = await pack.read({
+			buffer: Buffer.alloc(8),
+			position: offset + objectEntryPointer.next,
+		});
+		const deltaBaseOffset = readVariableOffset(deltaEntry.buffer, deltaEntryPointer);
 
 		deltaBase = await readPackedObject(repo, packPath, offset - deltaBaseOffset);
 	} else {
@@ -238,12 +242,6 @@ function constructDeltas(deltaBase: Buffer, commands: Buffer, deltas: Buffer[] =
 	deltas.push(delta);
 
 	return constructDeltas(deltaBase, commands.subarray(byteIndex), deltas);
-}
-
-function readObjectBody(payload: Buffer): Buffer {
-	const nullIndex = payload.indexOf(0);
-
-	return payload.subarray(nullIndex + 1);
 }
 
 function readVariableSize(buffer: Buffer, pointer: { next: number }): number {
