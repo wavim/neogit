@@ -1,73 +1,53 @@
 import { Buffer } from "node:buffer";
+import { hash } from "node:crypto";
 import { open, readdir, readFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { createInflate, inflate } from "node:zlib";
+import { GitCache } from "./git-cache";
 
-export interface GitObject {
-	repo: string;
-	hash: string;
-}
-
-export interface Cache {
-	objects?: Map<string, Buffer>;
-}
-function getCacheKey(object: GitObject) {
-	return `${object.repo}:${object.hash}`;
-}
-
-export async function readObject(object: GitObject, cache?: Cache): Promise<Buffer> {
-	if (cache) {
-		cache.objects ??= new Map();
-
-		const cached = cache.objects.get(getCacheKey(object));
-		if (cached) {
-			return cached;
-		}
-	}
-
-	let data: Buffer | null = null;
-
+export async function readGitObject(
+	repo: string,
+	hash: string,
+	cache: GitCache = new GitCache(),
+): Promise<Buffer> {
 	try {
-		data = await readLooseObject(object);
+		return await readLooseObject(repo, hash, cache);
 	} catch {
 		/* empty */
 	}
 
 	try {
-		data = await readIndexedObject(object);
+		return await readIndexedObject(repo, hash, cache);
 	} catch {
 		/* empty */
 	}
 
-	if (!data) {
-		throw new Error("could not get object info");
+	throw new Error("could not get object info");
+}
+
+async function readLooseObject(repo: string, hash: string, cache: GitCache): Promise<Buffer> {
+	const cached = cache.objects.get(GitCache.objectKey(repo, hash));
+	if (cached) {
+		return cached;
 	}
 
-	cache?.objects?.set(getCacheKey(object), data);
+	const objectPath = join(repo, ".git", "objects", hash.slice(0, 2), hash.slice(2));
+
+	const deflatedData = await readFile(objectPath);
+	const data = await promisify(inflate)(deflatedData);
+	cache.objects.set(GitCache.objectKey(repo, hash), data);
 
 	return data;
 }
 
-async function readLooseObject(object: GitObject): Promise<Buffer> {
-	const objectPath = join(
-		object.repo,
-		".git",
-		"objects",
-		object.hash.slice(0, 2),
-		object.hash.slice(2),
-	);
+async function readIndexedObject(repo: string, hash: string, cache: GitCache): Promise<Buffer> {
+	const cached = cache.objects.get(GitCache.objectKey(repo, hash));
+	if (cached) {
+		return cached;
+	}
 
-	const deflatedPayload = await readFile(objectPath);
-	const payload = await promisify(inflate)(deflatedPayload);
-
-	const nullIndex = payload.indexOf(0);
-
-	return payload.subarray(nullIndex + 1);
-}
-
-async function readIndexedObject(object: GitObject): Promise<Buffer> {
-	const packDir = join(object.repo, ".git", "objects", "pack");
+	const packDir = join(repo, ".git", "objects", "pack");
 
 	let packIndex: Buffer | null = null;
 	let packPath: string | null = null;
@@ -82,10 +62,12 @@ async function readIndexedObject(object: GitObject): Promise<Buffer> {
 		}
 
 		const packIndexPath = join(packDir, filePath);
-		packIndex = await readFile(packIndexPath);
+
+		packIndex = cache.packidx.get(packIndexPath) ?? (await readFile(packIndexPath));
+		cache.packidx.set(packIndexPath, packIndex);
 
 		const fanoutTable = packIndex.subarray(2 * 4, 2 * 4 + 256 * 4);
-		const fanoutIndex = +`0x${object.hash.slice(0, 2)}`;
+		const fanoutIndex = +`0x${hash.slice(0, 2)}`;
 
 		lowerBound =
 			fanoutIndex === 0 ? 0 : fanoutTable.readUInt32BE((fanoutIndex - 1) * 4);
@@ -93,9 +75,7 @@ async function readIndexedObject(object: GitObject): Promise<Buffer> {
 
 		if (lowerBound < upperBound) {
 			packPath = join(packDir, basename(filePath, ".idx") + ".pack");
-
 			objectCount = fanoutTable.readUInt32BE(255 * 4);
-
 			break;
 		}
 	}
@@ -105,7 +85,7 @@ async function readIndexedObject(object: GitObject): Promise<Buffer> {
 	}
 
 	const hashTable = packIndex.subarray(2 * 4 + 256 * 4, 2 * 4 + 256 * 4 + objectCount * 20);
-	const targetHash = Buffer.from(object.hash, "hex");
+	const targetHash = Buffer.from(hash, "hex");
 
 	upperBound--;
 	let bisect = 0;
@@ -151,10 +131,18 @@ async function readIndexedObject(object: GitObject): Promise<Buffer> {
 		offset = Number(offset64);
 	}
 
-	return await readPackedObject(object.repo, packPath, offset);
+	const data = await readPackedObject(repo, packPath, offset, cache);
+	cache.objects.set(GitCache.objectKey(repo, hash), data);
+
+	return data;
 }
 
-async function readPackedObject(repo: string, packPath: string, offset: number): Promise<Buffer> {
+async function readPackedObject(
+	repo: string,
+	packPath: string,
+	offset: number,
+	cache: GitCache,
+): Promise<Buffer> {
 	const pack = await open(packPath);
 
 	const objectEntry = Buffer.alloc(5);
@@ -181,10 +169,16 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 		throw new Error();
 	}
 
-	readVariableLengthSize(objectEntry, objectEntryPointer);
+	const objectSize =
+		(firstByte & 0b1111) | (parseObjectSize(objectEntry, objectEntryPointer) << 4);
 
 	if (objectType !== "ofs-delta" && objectType !== "ref-delta") {
-		return await readInflatedData(packPath, offset + objectEntryPointer.next);
+		await pack.close();
+
+		const head = Buffer.from(`${objectType} ${objectSize.toFixed()}\0`, "ascii");
+		const body = await inflateData(packPath, offset + objectEntryPointer.next);
+
+		return Buffer.concat([head, body]);
 	}
 
 	let deltaBase;
@@ -195,12 +189,12 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 			buffer: Buffer.alloc(8),
 			position: offset + objectEntryPointer.next,
 		});
-		const deltaBaseOffset = readVariableLengthOffset(
-			deltaEntry.buffer,
-			deltaEntryPointer,
-		);
+		const deltaBaseOffset = parseObjectOffset(deltaEntry.buffer, deltaEntryPointer);
 
-		deltaBase = await readPackedObject(repo, packPath, offset - deltaBaseOffset);
+		deltaBase = await readPackedObject(repo, packPath, offset - deltaBaseOffset, cache);
+
+		const sha = hash("sha1", deltaBase, "hex");
+		cache.objects.set(GitCache.objectKey(repo, sha), deltaBase);
 	} else {
 		const deltaEntry = await pack.read({
 			buffer: Buffer.alloc(20),
@@ -208,40 +202,55 @@ async function readPackedObject(repo: string, packPath: string, offset: number):
 		});
 		deltaEntryPointer.next += 20;
 
-		deltaBase = await readIndexedObject({
-			repo,
-			hash: deltaEntry.buffer.toString("hex"),
-		});
+		deltaBase = await readIndexedObject(repo, deltaEntry.buffer.toString("hex"), cache);
 	}
 
-	const deltaData = await readInflatedData(
+	await pack.close();
+
+	const deltaBaseHeadEnd = deltaBase.indexOf(0);
+	const deltaBaseHead = deltaBase.subarray(0, deltaBaseHeadEnd);
+	const deltaBaseBody = deltaBase.subarray(deltaBaseHeadEnd + 1);
+
+	const deltaData = await inflateData(
 		packPath,
 		offset + objectEntryPointer.next + deltaEntryPointer.next,
 	);
 	const deltaDataPointer = { next: 0 };
 
-	readVariableLengthSize(deltaData, deltaDataPointer);
-	readVariableLengthSize(deltaData, deltaDataPointer);
+	parseObjectSize(deltaData, deltaDataPointer);
+	parseObjectSize(deltaData, deltaDataPointer);
 
-	const deltaCommands = deltaData.subarray(deltaDataPointer.next);
+	const deltaInstructions = deltaData.subarray(deltaDataPointer.next);
+	const body = Buffer.concat(constructDeltas(deltaBaseBody, deltaInstructions));
 
-	return Buffer.concat(constructDeltas(deltaBase, deltaCommands));
+	const baseObjectType = deltaBaseHead.toString("ascii").split(" ")[0];
+	const head = Buffer.from(`${baseObjectType} ${body.byteLength.toFixed()}\0`, "ascii");
+
+	return Buffer.concat([head, body]);
 }
 
-function constructDeltas(deltaBase: Buffer, commands: Buffer, deltas: Buffer[] = []): Buffer[] {
-	if (commands.byteLength === 0) {
+function constructDeltas(
+	deltaBaseContent: Buffer,
+	deltaInstructions: Buffer,
+	deltas: Buffer[] = [],
+): Buffer[] {
+	if (deltaInstructions.byteLength === 0) {
 		return deltas;
 	}
 
-	const instruction = commands.readUInt8(0);
+	const instruction = deltaInstructions.readUInt8(0);
 
 	if ((instruction & 0x80) === 0) {
 		const dataSize = instruction & 0x7f;
 
-		const delta = commands.subarray(1, dataSize + 1);
+		const delta = deltaInstructions.subarray(1, dataSize + 1);
 		deltas.push(delta);
 
-		return constructDeltas(deltaBase, commands.subarray(dataSize + 1), deltas);
+		return constructDeltas(
+			deltaBaseContent,
+			deltaInstructions.subarray(dataSize + 1),
+			deltas,
+		);
 	}
 
 	const byteMask = instruction & 0x7f;
@@ -251,8 +260,10 @@ function constructDeltas(deltaBase: Buffer, commands: Buffer, deltas: Buffer[] =
 	let copyOffsetShift = 0;
 
 	for (let i = 0; i < 4; i++) {
-		const exists = (byteMask >> i) & 1;
-		copyOffset |= exists ? commands.readUInt8(byteIndex++) << copyOffsetShift : 0;
+		const notMasked = (byteMask >> i) & 1;
+		copyOffset |= notMasked
+			? deltaInstructions.readUInt8(byteIndex++) << copyOffsetShift
+			: 0;
 		copyOffsetShift += 8;
 	}
 
@@ -260,18 +271,20 @@ function constructDeltas(deltaBase: Buffer, commands: Buffer, deltas: Buffer[] =
 	let copySizeShift = 0;
 
 	for (let i = 4; i < 7; i++) {
-		const exists = (byteMask >> i) & 1;
-		copySize |= exists ? commands.readUInt8(byteIndex++) << copySizeShift : 0;
+		const notMasked = (byteMask >> i) & 1;
+		copySize |= notMasked
+			? deltaInstructions.readUInt8(byteIndex++) << copySizeShift
+			: 0;
 		copySizeShift += 8;
 	}
 
-	const delta = deltaBase.subarray(copyOffset, copyOffset + copySize);
+	const delta = deltaBaseContent.subarray(copyOffset, copyOffset + copySize);
 	deltas.push(delta);
 
-	return constructDeltas(deltaBase, commands.subarray(byteIndex), deltas);
+	return constructDeltas(deltaBaseContent, deltaInstructions.subarray(byteIndex), deltas);
 }
 
-function readVariableLengthSize(buffer: Buffer, pointer: { next: number }): number {
+function parseObjectSize(buffer: Buffer, pointer: { next: number }): number {
 	let value = 0;
 	let byte = 0;
 	let shift = 0;
@@ -286,7 +299,7 @@ function readVariableLengthSize(buffer: Buffer, pointer: { next: number }): numb
 	return value;
 }
 
-function readVariableLengthOffset(buffer: Buffer, pointer: { next: number }): number {
+function parseObjectOffset(buffer: Buffer, pointer: { next: number }): number {
 	let value = 0;
 	let byte = 0;
 	let multiByte = false;
@@ -305,18 +318,16 @@ function readVariableLengthOffset(buffer: Buffer, pointer: { next: number }): nu
 	return value;
 }
 
-async function readInflatedData(packPath: string, offset: number): Promise<Buffer> {
+async function inflateData(packPath: string, offset: number): Promise<Buffer> {
 	const pack = await open(packPath);
 
-	const contentStream = pack.createReadStream({ start: offset });
-	const inflateStream = contentStream.pipe(createInflate());
+	const dataStream = pack.createReadStream({ start: offset });
+	const inflateStream = dataStream.pipe(createInflate());
 
-	const contentChunks = await Array.fromAsync<Buffer>(inflateStream);
+	const dataChunks = await Array.fromAsync<Buffer>(inflateStream);
 
-	contentStream.destroy();
+	dataStream.destroy();
 	inflateStream.destroy();
 
-	await pack.close();
-
-	return Buffer.concat(contentChunks);
+	return Buffer.concat(dataChunks);
 }
