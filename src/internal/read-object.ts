@@ -4,8 +4,7 @@ import { open, readdir, readFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { createInflate, inflate } from "node:zlib";
-
-import { GitCache } from "../shared/git-cache";
+import { GitCache } from "../shared/cache";
 
 export async function readGitObject(
 	repo: string,
