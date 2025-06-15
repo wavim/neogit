@@ -7,18 +7,30 @@ export async function getLocalBranches({ repo }: GitApiParam): Promise<string[]>
 	const branches = await readdir(refsHeadsDir);
 
 	const packedRefsPath = join(repo, ".git", "packed-refs");
-	let packedRefs = null;
 	try {
-		packedRefs = await readFile(packedRefsPath, "utf8");
+		const packedRefBranches = await getPackedRefsBranches(packedRefsPath);
+		branches.push(...packedRefBranches);
 	} catch {
 		/* empty */
 	}
 
-	for (const line of packedRefs?.split("\n") ?? []) {
+	return Array.from(new Set(branches));
+}
+
+async function getPackedRefsBranches(packedRefsPath: string): Promise<string[]> {
+	const branches: string[] = [];
+
+	const packedRefs = await readFile(packedRefsPath, "utf8");
+
+	for (const line of packedRefs.split("\n")) {
 		const [, ref = undefined] = line.split(" ");
 
 		if (ref?.startsWith("refs/heads/")) {
-			branches.push(ref);
+			const branch = ref.split("/").at(-1);
+
+			if (branch) {
+				branches.push(branch);
+			}
 		}
 	}
 
