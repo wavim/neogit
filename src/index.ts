@@ -1,1 +1,1 @@
-export * as Object from "./objects/object";
+export { GitCache } from "./shared/git-cache";
