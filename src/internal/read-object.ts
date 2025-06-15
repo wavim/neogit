@@ -28,7 +28,7 @@ export async function readGitObject(
 }
 
 async function readLooseObject(repo: string, hash: string, cache: GitCache): Promise<Buffer> {
-	const cached = cache.objects.get(GitCache.objectKey(repo, hash));
+	const cached = cache.objects.get(GitCache.getKey(repo, hash));
 	if (cached) {
 		return cached;
 	}
@@ -37,13 +37,13 @@ async function readLooseObject(repo: string, hash: string, cache: GitCache): Pro
 
 	const deflatedData = await readFile(objectPath);
 	const data = await promisify(inflate)(deflatedData);
-	cache.objects.set(GitCache.objectKey(repo, hash), data);
+	cache.objects.set(GitCache.getKey(repo, hash), data);
 
 	return data;
 }
 
 async function readIndexedObject(repo: string, hash: string, cache: GitCache): Promise<Buffer> {
-	const cached = cache.objects.get(GitCache.objectKey(repo, hash));
+	const cached = cache.objects.get(GitCache.getKey(repo, hash));
 	if (cached) {
 		return cached;
 	}
@@ -133,7 +133,7 @@ async function readIndexedObject(repo: string, hash: string, cache: GitCache): P
 	}
 
 	const data = await readPackedObject(repo, packPath, offset, cache);
-	cache.objects.set(GitCache.objectKey(repo, hash), data);
+	cache.objects.set(GitCache.getKey(repo, hash), data);
 
 	return data;
 }
@@ -195,7 +195,7 @@ async function readPackedObject(
 		deltaBase = await readPackedObject(repo, packPath, offset - deltaBaseOffset, cache);
 
 		const sha = hash("sha1", deltaBase, "hex");
-		cache.objects.set(GitCache.objectKey(repo, sha), deltaBase);
+		cache.objects.set(GitCache.getKey(repo, sha), deltaBase);
 	} else {
 		const deltaEntry = await pack.read({
 			buffer: Buffer.alloc(20),
