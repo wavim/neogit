@@ -316,5 +316,7 @@ async function readInflatedData(packPath: string, offset: number): Promise<Buffe
 	contentStream.destroy();
 	inflateStream.destroy();
 
+	await pack.close();
+
 	return Buffer.concat(contentChunks);
 }
