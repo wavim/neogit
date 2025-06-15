@@ -5,6 +5,7 @@ import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { createInflate, inflate } from "node:zlib";
 import { GitCache } from "../shared/cache";
+import { binarySearch } from "../utils/binary-search";
 
 export async function readGitObject(
 	repo: string,
@@ -79,7 +80,6 @@ async function readIndexedObject(repo: string, hash: string, cache: GitCache): P
 			break;
 		}
 	}
-
 	if (!packIndex || !packPath) {
 		throw new Error();
 	}
@@ -87,24 +87,10 @@ async function readIndexedObject(repo: string, hash: string, cache: GitCache): P
 	const hashTable = packIndex.subarray(2 * 4 + 256 * 4, 2 * 4 + 256 * 4 + objectCount * 20);
 	const targetHash = Buffer.from(hash, "hex");
 
-	upperBound--;
-	let bisect = 0;
-
-	while (lowerBound <= upperBound) {
-		bisect = Math.floor((lowerBound + upperBound) / 2);
-		const compare = targetHash.compare(hashTable, bisect * 20, bisect * 20 + 20);
-
-		if (compare === 0) {
-			break;
-		}
-		if (compare > 0) {
-			lowerBound = bisect + 1;
-		} else {
-			upperBound = bisect - 1;
-		}
-	}
-
-	if (lowerBound > upperBound) {
+	const targetIndex = binarySearch(lowerBound, upperBound - 1, (bisect) =>
+		targetHash.compare(hashTable, bisect * 20, bisect * 20 + 20),
+	);
+	if (targetIndex === null) {
 		throw new Error();
 	}
 
@@ -112,7 +98,7 @@ async function readIndexedObject(repo: string, hash: string, cache: GitCache): P
 		2 * 4 + 256 * 4 + objectCount * 20 + objectCount * 4,
 		2 * 4 + 256 * 4 + objectCount * 20 + objectCount * 4 + objectCount * 4,
 	);
-	const offset32Index = bisect;
+	const offset32Index = targetIndex;
 
 	let offset = offset32Table.readUInt32BE(offset32Index * 4);
 
