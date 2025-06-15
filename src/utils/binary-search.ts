@@ -1,8 +1,8 @@
 export function binarySearch(
 	lower: number,
 	upper: number,
-	compare: (bisect: number) => 1 | 0 | -1,
-): number | null {
+	compare: (bisect: number) => number,
+): number | undefined {
 	while (lower <= upper) {
 		const bisect = Math.floor((lower + upper) / 2);
 		const result = compare(bisect);
@@ -17,5 +17,5 @@ export function binarySearch(
 		}
 	}
 
-	return null;
+	return undefined;
 }

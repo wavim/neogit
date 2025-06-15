@@ -87,10 +87,10 @@ async function readIndexedObject(repo: string, hash: string, cache: GitCache): P
 	const hashTable = packIndex.subarray(2 * 4 + 256 * 4, 2 * 4 + 256 * 4 + objectCount * 20);
 	const targetHash = Buffer.from(hash, "hex");
 
-	const targetIndex = binarySearch(lowerBound, upperBound - 1, (bisect) =>
-		targetHash.compare(hashTable, bisect * 20, bisect * 20 + 20),
-	);
-	if (targetIndex === null) {
+	const objectIndex = binarySearch(lowerBound, upperBound - 1, (bisect) => {
+		return targetHash.compare(hashTable, bisect * 20, bisect * 20 + 20);
+	});
+	if (objectIndex === undefined) {
 		throw new Error();
 	}
 
@@ -98,7 +98,7 @@ async function readIndexedObject(repo: string, hash: string, cache: GitCache): P
 		2 * 4 + 256 * 4 + objectCount * 20 + objectCount * 4,
 		2 * 4 + 256 * 4 + objectCount * 20 + objectCount * 4 + objectCount * 4,
 	);
-	const offset32Index = targetIndex;
+	const offset32Index = objectIndex;
 
 	let offset = offset32Table.readUInt32BE(offset32Index * 4);
 
@@ -167,7 +167,7 @@ async function readPackedObject(
 		return Buffer.concat([head, body]);
 	}
 
-	let deltaBase;
+	let deltaBase: Buffer | null = null;
 	const deltaEntryPointer = { next: 0 };
 
 	if (objectType === "ofs-delta") {
