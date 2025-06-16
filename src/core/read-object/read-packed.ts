@@ -192,18 +192,8 @@ function buildDelta(base: Buffer, instructions: Buffer): Buffer {
 		const byteMask = instruction & 0x7f;
 		const bytePointer: BytePointer = { next: 1 };
 
-		const offset = decodeInstruct(
-			instructions,
-			byteMask,
-			{ from: 0, to: 4 },
-			bytePointer,
-		);
-		const size = decodeInstruct(
-			instructions,
-			byteMask,
-			{ from: 4, to: 7 },
-			bytePointer,
-		);
+		const offset = decodeInstruct("offset", instructions, byteMask, bytePointer);
+		const size = decodeInstruct("size", instructions, byteMask, bytePointer);
 
 		const delta = base.subarray(offset, offset + size);
 		deltas.push(delta);
@@ -243,15 +233,18 @@ function decodeOffset(buffer: Buffer, pointer: BytePointer): number {
 }
 
 function decodeInstruct(
+	type: "offset" | "size",
 	buffer: Buffer,
 	mask: number,
-	range: { from: number; to: number },
 	pointer: BytePointer,
 ) {
 	let value = 0;
 	let shift = 0;
 
-	for (let i = range.from; i < range.to; i++) {
+	const fm = type === "offset" ? 0 : 4;
+	const to = type === "offset" ? 4 : 7;
+
+	for (let i = fm; i < to; i++) {
 		value |= (mask >> i) & 1 ? buffer.readUint8(pointer.next++) << shift : 0;
 		shift += 8;
 	}
