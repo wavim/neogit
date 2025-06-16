@@ -1,4 +1,2 @@
-export { GitCache } from "./shared/cache";
-
-export { getCurrentBranch } from "./public/get-current-branch";
-export { getLocalBranches } from "./public/get-local-branches";
+export { Cache } from "./core/cache/cache";
+export { readObject } from "./core/read-object/read-object";
