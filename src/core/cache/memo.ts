@@ -1,17 +1,15 @@
 export class Memo<T> extends Map<string, T> {
 	async memo(resolve: () => Promise<T>, ...keys: string[]): Promise<T> {
-		const memoized = this.get(concat(keys));
+		const key = keys.join("\0");
+
+		const memoized = this.get(key);
 		if (memoized) {
 			return memoized;
 		}
 
 		const data = await resolve();
-		this.set(concat(keys), data);
+		this.set(key, data);
 
 		return data;
 	}
-}
-
-function concat(keys: string[]): string {
-	return keys.map(encodeURIComponent).join("/");
 }
