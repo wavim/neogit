@@ -4,13 +4,13 @@ import { binarySearch } from "../../util/binary-search";
 import { inflateOffset } from "../../util/inflate-offset";
 import { ReadObjectCache } from "./read-object";
 
-export async function readPacked(
+export function readPacked(
 	repo: string,
 	hash: string,
 
 	cache: ReadObjectCache,
 ): Promise<Buffer> {
-	return await cache.buffers.memo(() => read(repo, hash, cache), repo, hash);
+	return cache.buffers.memo(() => read(repo, hash, cache), repo, hash);
 }
 
 async function read(
