@@ -3,6 +3,6 @@ import { ReadObjectCache } from "../read-object/read-object";
 import { Memo } from "./memo";
 
 export class Cache implements ReadObjectCache, GetParentsCache {
-	buffers = new Memo<Buffer>();
-	parents = new Memo<string[]>();
+	buffers = new Memo<[string, string], Buffer>();
+	parents = new Memo<[string, string], string[]>();
 }
