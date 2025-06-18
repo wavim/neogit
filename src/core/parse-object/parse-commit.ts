@@ -24,8 +24,8 @@ export function parseCommit(data: Buffer): Commit {
 	const regexp = new RegExp(
 		"^tree (?<tree>[0-9a-f]{40})\n" +
 			"(?<parents>(?:parent [0-9a-f]{40}\n)*)" +
-			"author (?<aname>.+?) <(?<aemail>.+?)> (?<atimestamp>\\d+) (?<atimezone>[+-]\\d{4})\n" +
-			"committer (?<cname>.+?) <(?<cemail>.+?)> (?<ctimestamp>\\d+) (?<ctimezone>[+-]\\d{4})" +
+			"author (?<aname>.+?) <(?<aemail>[^>]*)> (?<atimestamp>\\d+) (?<atimezone>[+-]\\d{4})\n" +
+			"committer (?<cname>.+?) <(?<cemail>[^>]*)> (?<ctimestamp>\\d+) (?<ctimezone>[+-]\\d{4})" +
 			"[\\s\\S]*?\n\n" +
 			"(?<message>[\\s\\S]*)$",
 	);
