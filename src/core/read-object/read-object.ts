@@ -11,7 +11,7 @@ export async function readObject(
 	repo: string,
 	hash: string,
 
-	cache: ReadObjectCache = new Cache(),
+	cache = new Cache(),
 ): Promise<Buffer> {
 	try {
 		return await readLoose(repo, hash, cache);

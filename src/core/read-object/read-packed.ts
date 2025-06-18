@@ -2,13 +2,13 @@ import { open, readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { binarySearch } from "../../util/binary-search";
 import { inflateOffset } from "../../util/inflate-offset";
-import { ReadObjectCache } from "./read-object";
+import { Cache } from "../cache/cache";
 
 export function readPacked(
 	repo: string,
 	hash: string,
 
-	cache: ReadObjectCache,
+	cache: Cache,
 ): Promise<Buffer> {
 	return cache.buffers.memo(() => read(repo, hash, cache), repo, hash);
 }
@@ -17,7 +17,7 @@ async function read(
 	repo: string,
 	hash: string,
 
-	cache: ReadObjectCache,
+	cache: Cache,
 ): Promise<Buffer> {
 	const folderPath = join(repo, ".git", "objects", "pack");
 
@@ -96,7 +96,7 @@ async function readFromPack(
 	path: string,
 	offset: number,
 
-	cache: ReadObjectCache,
+	cache: Cache,
 ): Promise<Buffer> {
 	const pack = await open(path);
 

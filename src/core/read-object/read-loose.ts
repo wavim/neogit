@@ -2,13 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { inflate } from "node:zlib";
-import { ReadObjectCache } from "./read-object";
+import { Cache } from "../cache/cache";
 
 export function readLoose(
 	repo: string,
 	hash: string,
 
-	cache: ReadObjectCache,
+	cache: Cache,
 ): Promise<Buffer> {
 	return cache.buffers.memo(() => read(repo, hash), repo, hash);
 }
