@@ -7,8 +7,8 @@ export class Bloom {
 		}
 	}
 
-	test(hex: string): boolean {
-		return (this.mask & mask(hex)) !== 0n;
+	negative(hex: string): boolean {
+		return !(this.mask & mask(hex));
 	}
 }
 
