@@ -10,7 +10,7 @@ export function readLoose(
 
 	cache: Cache,
 ): Promise<Buffer> {
-	return cache.buffers.memo(() => read(repo, hash), repo, hash);
+	return cache.object.memo(() => read(repo, hash), repo, hash);
 }
 
 async function read(repo: string, hash: string): Promise<Buffer> {
