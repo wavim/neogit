@@ -4,7 +4,7 @@ import { readLoose } from "./read-loose";
 import { readPacked } from "./read-packed";
 
 export interface ReadObjectCache {
-	buffers: Memo<[string, string], Buffer>;
+	buffers: Memo<Buffer>;
 }
 
 export async function readObject(
