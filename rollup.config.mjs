@@ -18,7 +18,7 @@ export default [
 			resolvePlugin(),
 
 			// safe for ECMA compliant code
-			terserPlugin({ compress: { unsafe: true } }),
+			// terserPlugin({ compress: { unsafe: true } }),
 		],
 
 		watch: true,

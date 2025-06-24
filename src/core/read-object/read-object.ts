@@ -3,13 +3,14 @@ import { join } from "node:path";
 import { Bloom } from "../cache/bloom";
 import { Cache } from "../cache/cache";
 import { Memo } from "../cache/memo";
+import { Pack } from "./pack";
 import { readLoose } from "./read-loose";
 import { readPacked } from "./read-packed";
 
 export interface ReadObjectCache {
-	lbloom: Memo<[string], Bloom>;
-	object: Memo<[string, string], Buffer>;
-	offset: Memo<[string, string], number>;
+	lbloom: Memo<Bloom>;
+	object: Memo<Buffer>;
+	packed: Memo<Pack[]>;
 }
 
 export async function readObject(

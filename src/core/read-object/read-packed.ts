@@ -1,6 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { promisify } from "node:util";
+import { inflate } from "node:zlib";
 import { Cache } from "../cache/cache";
+import { getIndexed, Indexed, Pack } from "./pack";
 
 export function readPacked(
 	repo: string,
@@ -11,227 +14,192 @@ export function readPacked(
 	return cache.object.memo(() => read(repo, hash, cache), repo, hash);
 }
 
+// MO TODO optimize for performance & clarity
 async function read(
 	repo: string,
 	hash: string,
 
 	cache: Cache,
 ): Promise<Buffer> {
-	const offset = await cache.offset.memo(() => getOffset(repo, hash, cache), repo, hash);
-	console.log("offset", offset);
+	const packed = await cache.packed.memo(async () => {
+		const packs = [];
+		const packsPath = join(repo, ".git", "objects", "pack");
 
-	return await readFromPack();
+		const packPaths = await readdir(packsPath);
+		const idxPaths = packPaths.filter((path) => extname(path) === ".idx");
+
+		for (const idxPath of idxPaths) {
+			const idxBuffer = await readFile(join(packsPath, idxPath));
+			const packPath = join(packsPath, idxPath.replace(".idx", ".pack"));
+
+			packs.push(new Pack(packPath, idxBuffer));
+		}
+
+		return packs;
+	}, repo);
+
+	const indexed = await getIndexed(packed, hash);
+
+	if (indexed === undefined) {
+		throw new Error("could not get object info");
+	}
+
+	return await parse(repo, indexed, cache);
 }
 
-// MO FIX forgot to get packPath, consider caching repo + pack -> offset{}
-async function getOffset(
+interface BytePointer {
+	next: number;
+}
+
+async function parse(
 	repo: string,
-	hash: string,
+	{
+		pack,
+
+		buffer,
+		offset,
+	}: Indexed,
 
 	cache: Cache,
-): Promise<number> {
-	const packsPath = join(repo, ".git", "objects", "pack");
+): Promise<Buffer> {
+	const pointer: BytePointer = { next: 0 };
 
-	for (const path of await readdir(packsPath)) {
-		if (extname(path) !== ".idx") {
+	const firstByte = buffer.readUint8(0);
+	pointer.next++;
+
+	const types = [
+		"invalid",
+		"commit",
+		"tree",
+		"blob",
+		"tag",
+		"reserved",
+		"ofs-delta",
+		"ref-delta",
+	] as const;
+	const type = types[(firstByte >> 4) & 0b0111];
+
+	if (type === "invalid" || type === "reserved") {
+		throw new Error();
+	}
+
+	const size = (firstByte & 0b1111) | (decodeSize(buffer, pointer) << 4);
+
+	if (type !== "ofs-delta" && type !== "ref-delta") {
+		const objectHead = Buffer.from(`${type} ${size.toFixed()}\0`, "ascii");
+		const objectBody = await promisify(inflate)(buffer.subarray(pointer.next));
+
+		return Buffer.concat([objectHead, objectBody]);
+	}
+
+	let base: Buffer | undefined;
+
+	if (type === "ofs-delta") {
+		const baseOffset = offset - decodeOffset(buffer, pointer);
+
+		base = await pack.materializeOffset(baseOffset);
+
+		if (base === undefined) {
+			throw new Error("could not get object info");
+		}
+	} else {
+		const baseHash = buffer.toString("hex", pointer.next, pointer.next + 20);
+		pointer.next += 20;
+
+		base = await read(repo, baseHash, cache);
+	}
+
+	const delta = await promisify(inflate)(buffer.subarray(pointer.next));
+	const deltaPointer = { next: 0 };
+
+	decodeSize(delta, deltaPointer);
+	const objectSize = decodeSize(delta, deltaPointer);
+
+	const instructions = delta.subarray(deltaPointer.next);
+
+	const baseHeadEnd = base.indexOf(0);
+	const objectBody = buildDelta(base.subarray(baseHeadEnd + 1), instructions);
+	const baseHead = base.subarray(0, baseHeadEnd);
+
+	const baseType = baseHead.toString("ascii").split(" ")[0];
+	const objectHead = Buffer.from(`${baseType} ${objectSize.toFixed()}\0`, "ascii");
+
+	return Buffer.concat([objectHead, objectBody]);
+}
+
+function buildDelta(base: Buffer, instructions: Buffer): Buffer {
+	const deltas = [];
+
+	while (instructions.byteLength !== 0) {
+		const instruction = instructions.readUint8(0);
+
+		if ((instruction & 0x80) === 0) {
+			const size = instruction & 0x7f;
+			deltas.push(instructions.subarray(1, size + 1));
+
+			instructions = instructions.subarray(size + 1);
 			continue;
 		}
 
-		const idxBuffer = await readFile(join(packsPath, path));
+		const byteMask = instruction & 0x7f;
+		const bytePointer: BytePointer = { next: 1 };
 
-		const oidFanout = idxBuffer.subarray(2 * 4, 2 * 4 + 256 * 4);
-		const oidCount = oidFanout.readUint32BE(255 * 4);
+		const offset = decodeInstruct("offset", byteMask, instructions, bytePointer);
+		const size = decodeInstruct("size", byteMask, instructions, bytePointer);
 
-		const oidLookup = idxBuffer.subarray(
-			2 * 4 + 256 * 4,
-			2 * 4 + 256 * 4 + oidCount * 20,
-		);
+		const delta = base.subarray(offset, offset + size);
+		deltas.push(delta);
 
-		const ofsLookup = idxBuffer.subarray(
-			2 * 4 + 256 * 4 + oidCount * 20 + oidCount * 4,
-			2 * 4 + 256 * 4 + oidCount * 20 + oidCount * 4 + oidCount * 4,
-		);
-
-		for (let i = 0; i < oidCount; i++) {
-			const oid = oidLookup.toString("hex", i * 20, i * 20 + 20);
-			const ofs = ofsLookup.readUint32BE(i * 4);
-
-			cache.offset.set(ofs, repo, oid);
-		}
-
-		if (cache.offset.has(repo, hash)) break;
+		instructions = instructions.subarray(bytePointer.next);
 	}
 
-	const offset = cache.offset.get(repo, hash);
+	return Buffer.concat(deltas);
+}
 
-	if (offset) {
-		return offset;
+function decodeSize(buffer: Buffer, pointer: BytePointer): number {
+	let byte = 0;
+	let size = 0;
+	let shift = 0;
+
+	do {
+		byte = buffer.readUint8(pointer.next++);
+		size |= (byte & 0x7f) << shift;
+		shift += 7;
+	} while (byte & 0x80);
+
+	return size;
+}
+
+function decodeOffset(buffer: Buffer, pointer: BytePointer): number {
+	let byte = buffer.readUint8(pointer.next++);
+	let offset = byte & 0x7f;
+
+	while (byte & 0x80) {
+		byte = buffer.readUint8(pointer.next++);
+		offset++;
+		offset <<= 7;
+		offset |= byte & 0x7f;
 	}
 
-	throw new Error("cannot get object info");
+	return offset;
 }
 
-// interface BytePointer {
-// 	next: number;
-// }
+function decodeInstruct(
+	type: "offset" | "size",
+	mask: number,
+	buffer: Buffer,
+	pointer: BytePointer,
+) {
+	let value = 0;
+	let shift = 0;
 
-async function readFromPack(): Promise<Buffer> {
-	await new Promise((res) => {
-		res(69);
-	});
+	const fm = type === "offset" ? 0 : 4;
+	const to = type === "offset" ? 4 : 7;
 
-	return Buffer.alloc(0);
+	for (let i = fm; i < to; i++) {
+		value |= (mask >> i) & 1 ? buffer.readUint8(pointer.next++) << shift : 0;
+		shift += 8;
+	}
 
-	// const pack = await open(path);
-
-	// const { buffer: head } = await pack.read({ buffer: Buffer.alloc(5), position: offset });
-	// const headPointer: BytePointer = { next: 0 };
-
-	// const firstByte = head.readUint8(0);
-	// headPointer.next++;
-
-	// const types = [
-	// 	"invalid",
-	// 	"commit",
-	// 	"tree",
-	// 	"blob",
-	// 	"tag",
-	// 	"reserved",
-	// 	"ofs-delta",
-	// 	"ref-delta",
-	// ] as const;
-	// const type = types[(firstByte >> 4) & 0b0111];
-
-	// if (type === "invalid" || type === "reserved") {
-	// 	throw new Error();
-	// }
-
-	// const size = (firstByte & 0b1111) | (decodeSize(head, headPointer) << 4);
-
-	// if (type !== "ofs-delta" && type !== "ref-delta") {
-	// 	await pack.close();
-
-	// 	const objectHead = Buffer.from(`${type} ${size.toFixed()}\0`, "ascii");
-	// 	const objectBody = await inflateOffset(path, offset + headPointer.next);
-
-	// 	return Buffer.concat([objectHead, objectBody]);
-	// }
-
-	// let base: Buffer | undefined;
-	// const basePointer: BytePointer = { next: 0 };
-
-	// if (type === "ofs-delta") {
-	// 	const { buffer: ofsHead } = await pack.read({
-	// 		buffer: Buffer.alloc(8),
-	// 		position: offset + headPointer.next,
-	// 	});
-	// 	const baseOffset = offset - decodeOffset(ofsHead, basePointer);
-
-	// 	base = await readFromPack(repo, path, baseOffset, cache);
-	// } else {
-	// 	const { buffer: refHead } = await pack.read({
-	// 		buffer: Buffer.alloc(20),
-	// 		position: offset + headPointer.next,
-	// 	});
-	// 	const baseHash = refHead.toString("hex");
-	// 	basePointer.next += 20;
-
-	// 	base = await readPacked(repo, baseHash, cache);
-	// }
-
-	// await pack.close();
-
-	// const delta = await inflateOffset(path, offset + headPointer.next + basePointer.next);
-	// const deltaPointer = { next: 0 };
-
-	// decodeSize(delta, deltaPointer);
-	// const objectSize = decodeSize(delta, deltaPointer);
-
-	// const instructions = delta.subarray(deltaPointer.next);
-
-	// const baseHeadEnd = base.indexOf(0);
-	// const objectBody = buildDelta(base.subarray(baseHeadEnd + 1), instructions);
-
-	// const baseHead = base.subarray(0, baseHeadEnd);
-	// const baseType = baseHead.toString("ascii").split(" ")[0];
-	// const objectHead = Buffer.from(`${baseType} ${objectSize.toFixed()}\0`, "ascii");
-
-	// return Buffer.concat([objectHead, objectBody]);
+	return value;
 }
-
-// function buildDelta(base: Buffer, instructions: Buffer): Buffer {
-// 	const deltas = [];
-
-// 	while (instructions.byteLength !== 0) {
-// 		const instruction = instructions.readUint8(0);
-
-// 		if ((instruction & 0x80) === 0) {
-// 			const size = instruction & 0x7f;
-// 			deltas.push(instructions.subarray(1, size + 1));
-
-// 			instructions = instructions.subarray(size + 1);
-// 			continue;
-// 		}
-
-// 		const byteMask = instruction & 0x7f;
-// 		const bytePointer: BytePointer = { next: 1 };
-
-// 		const offset = decodeInstruct("offset", instructions, byteMask, bytePointer);
-// 		const size = decodeInstruct("size", instructions, byteMask, bytePointer);
-
-// 		const delta = base.subarray(offset, offset + size);
-// 		deltas.push(delta);
-
-// 		instructions = instructions.subarray(bytePointer.next);
-// 	}
-
-// 	return Buffer.concat(deltas);
-// }
-
-// function decodeSize(buffer: Buffer, pointer: BytePointer): number {
-// 	let byte = 0;
-// 	let size = 0;
-// 	let shift = 0;
-
-// 	do {
-// 		byte = buffer.readUint8(pointer.next++);
-// 		size |= (byte & 0x7f) << shift;
-// 		shift += 7;
-// 	} while (byte & 0x80);
-
-// 	return size;
-// }
-
-// function decodeOffset(buffer: Buffer, pointer: BytePointer): number {
-// 	let byte = buffer.readUint8(pointer.next++);
-// 	let offset = byte & 0x7f;
-
-// 	while (byte & 0x80) {
-// 		byte = buffer.readUint8(pointer.next++);
-// 		offset++;
-// 		offset <<= 7;
-// 		offset |= byte & 0x7f;
-// 	}
-
-// 	return offset;
-// }
-
-// function decodeInstruct(
-// 	type: "offset" | "size",
-// 	buffer: Buffer,
-// 	mask: number,
-// 	pointer: BytePointer,
-// ) {
-// 	let value = 0;
-// 	let shift = 0;
-
-// 	const fm = type === "offset" ? 0 : 4;
-// 	const to = type === "offset" ? 4 : 7;
-
-// 	for (let i = fm; i < to; i++) {
-// 		value |= (mask >> i) & 1 ? buffer.readUint8(pointer.next++) << shift : 0;
-// 		shift += 8;
-// 	}
-
-// 	return value;
-// }
