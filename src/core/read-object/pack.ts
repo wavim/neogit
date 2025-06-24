@@ -7,11 +7,11 @@ export interface Indexed {
 	offset: number;
 }
 
-export async function getIndexed(packed: Pack[], hash: string): Promise<Indexed | undefined> {
+export async function getIndexed(packs: Pack[], hash: string): Promise<Indexed | undefined> {
 	let buffer: Buffer | undefined;
 	let offset: number | undefined;
 
-	for (const pack of packed) {
+	for (const pack of packs) {
 		const res = await pack.materializeHash(hash);
 
 		if (res === undefined) {

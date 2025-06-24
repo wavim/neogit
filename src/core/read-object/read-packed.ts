@@ -1,3 +1,5 @@
+// MO TODO optimize for performance & clarity
+
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { promisify } from "node:util";
@@ -5,23 +7,13 @@ import { inflate } from "node:zlib";
 import { Cache } from "../cache/cache";
 import { getIndexed, Indexed, Pack } from "./pack";
 
-export function readPacked(
+export async function readPacked(
 	repo: string,
 	hash: string,
 
 	cache: Cache,
 ): Promise<Buffer> {
-	return cache.object.memo(() => read(repo, hash, cache), repo, hash);
-}
-
-// MO TODO optimize for performance & clarity
-async function read(
-	repo: string,
-	hash: string,
-
-	cache: Cache,
-): Promise<Buffer> {
-	const packed = await cache.packed.memo(async () => {
+	const packed = await cache.packs.memo(async () => {
 		const packs = [];
 		const packsPath = join(repo, ".git", "objects", "pack");
 
@@ -106,7 +98,7 @@ async function parse(
 		const baseHash = buffer.toString("hex", pointer.next, pointer.next + 20);
 		pointer.next += 20;
 
-		base = await read(repo, baseHash, cache);
+		base = await readPacked(repo, baseHash, cache);
 	}
 
 	const delta = await promisify(inflate)(buffer.subarray(pointer.next));
