@@ -1,5 +1,5 @@
 export class Bloom {
-	private mask = 0n;
+	readonly mask = 0n;
 
 	constructor(entries: string[]) {
 		for (const hex of entries) {

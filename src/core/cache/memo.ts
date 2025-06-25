@@ -1,5 +1,5 @@
 export class Memo<T> {
-	private store = new Map<string, T>();
+	readonly store = new Map<string, T>();
 
 	async memo(resolve: () => Promise<T>, repo: string): Promise<T> {
 		const memoized = this.store.get(repo);

@@ -4,6 +4,6 @@ import { Bloom } from "./bloom";
 import { Memo } from "./memo";
 
 export class Cache implements ReadObjectCache {
-	bloom = new Memo<Bloom>();
-	packs = new Memo<Pack[]>();
+	readonly bloom = new Memo<Bloom>();
+	readonly packs = new Memo<Pack[]>();
 }
