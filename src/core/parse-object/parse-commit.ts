@@ -31,16 +31,15 @@ export function parseCommit(buffer: Buffer): Commit {
 	const reCommitter =
 		"committer (?<cname>.+?) <(?<cemail>[^>]*)> (?<ctimestamp>\\d+) (?<ctimezone>[+-]\\d{4})";
 
-	const reMessage = "(?<message>[\\s\\S]*)";
+	const head = new RegExp(`^${reTree}\n${reParents}${reAuthor}\n${reCommitter}`).exec(
+		payload,
+	);
 
-	const re = new RegExp(`^${reTree}\n${reParents}${reAuthor}\n${reCommitter}${reMessage}$`);
-	const match = re.exec(payload);
-
-	if (match === null) {
+	if (head === null) {
 		throw new Error("corrupt commit object");
 	}
 
-	const groups = match.groups as Record<
+	const groups = head.groups as Record<
 		| "tree"
 		| "parents"
 		| "aname"
@@ -50,8 +49,7 @@ export function parseCommit(buffer: Buffer): Commit {
 		| "cname"
 		| "cemail"
 		| "ctimestamp"
-		| "ctimezone"
-		| "message",
+		| "ctimezone",
 		string
 	>;
 
@@ -78,7 +76,7 @@ export function parseCommit(buffer: Buffer): Commit {
 			timezone: timezone(groups.ctimezone),
 		},
 
-		message: groups.message.trimStart(),
+		message: payload.slice(head[0].length).trimStart(),
 	};
 }
 
