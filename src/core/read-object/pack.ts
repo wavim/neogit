@@ -46,18 +46,18 @@ export class Pack {
 		}
 	}
 
-	async queryHash(hash: string): Promise<Packed | undefined> {
-		const offset = this.ofsMap.get(hash);
+	async queryRef(ref: string): Promise<Packed | undefined> {
+		const offset = this.ofsMap.get(ref);
 
 		if (offset === undefined) {
 			return undefined;
 		}
 
-		return await this.queryOffset(offset);
+		return await this.queryOfs(offset);
 	}
 
-	async queryOffset(offset: number): Promise<Packed | undefined> {
-		let end = this.ofsEnd.get(offset);
+	async queryOfs(ofs: number): Promise<Packed | undefined> {
+		let end = this.ofsEnd.get(ofs);
 
 		if (end === undefined) {
 			return undefined;
@@ -70,11 +70,11 @@ export class Pack {
 			end = stats.size;
 		}
 
-		const buffer = Buffer.alloc(end - offset);
+		const buffer = Buffer.alloc(end - ofs);
 
-		await handle.read(buffer, { position: offset });
+		await handle.read(buffer, { position: ofs });
 		await handle.close();
 
-		return { offset, buffer };
+		return { offset: ofs, buffer };
 	}
 }

@@ -32,7 +32,7 @@ export async function readPacked(
 	let packed: Packed | undefined;
 
 	for (pack of packs) {
-		packed = await pack.queryHash(hash);
+		packed = await pack.queryRef(hash);
 
 		if (packed !== undefined) {
 			break;
@@ -93,7 +93,7 @@ async function parse(
 	if (type === "ofs-delta") {
 		const baseOffset = offset - decodeOffset(buffer, pointer);
 
-		const packed = await pack.queryOffset(baseOffset);
+		const packed = await pack.queryOfs(baseOffset);
 		base = packed?.buffer;
 
 		if (base === undefined) {
