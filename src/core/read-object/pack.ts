@@ -1,37 +1,17 @@
 import { open } from "node:fs/promises";
 
-export interface Indexed {
-	pack: Pack;
-
-	buffer: Buffer;
+export interface Packed {
 	offset: number;
-}
-
-export async function getIndexed(packs: Pack[], hash: string): Promise<Indexed | undefined> {
-	let buffer: Buffer | undefined;
-	let offset: number | undefined;
-
-	for (const pack of packs) {
-		const res = await pack.materializeHash(hash);
-
-		if (res === undefined) {
-			continue;
-		}
-
-		buffer = res.buffer;
-		offset = res.offset;
-
-		return { pack, buffer, offset };
-	}
+	buffer: Buffer;
 }
 
 export class Pack {
-	private ofsMap = new Map<string, number>();
-	private ofsLink = new Map<number, number>();
+	readonly ofsMap = new Map<string, number>();
+	readonly ofsEnd = new Map<number, number>();
 
 	constructor(
-		readonly packPath: string,
 		idxBuffer: Buffer,
+		readonly pack: string,
 	) {
 		const oidFanout = idxBuffer.subarray(2 * 4, 2 * 4 + 256 * 4);
 		const oidCount = oidFanout.readUint32BE(255 * 4);
@@ -45,59 +25,55 @@ export class Pack {
 			2 * 4 + 256 * 4 + oidCount * 20 + oidCount * 4 + oidCount * 4,
 		);
 
-		const ofsList: number[] = [];
+		const ofsList = new Uint32Array(oidCount);
 
 		for (let i = 0; i < oidCount; i++) {
 			const oid = oidLookup.toString("hex", i * 20, i * 20 + 20);
 			const ofs = ofsLookup.readUint32BE(i * 4);
 
+			if (ofs & 0x80_00_00_00) {
+				continue;
+			}
+
 			this.ofsMap.set(oid, ofs);
-			ofsList.push(ofs);
+			ofsList[i] = ofs;
 		}
 
 		ofsList.sort();
 
 		for (let i = 0; i < oidCount; i++) {
-			this.ofsLink.set(ofsList[i], ofsList[i + 1] ?? Infinity);
+			this.ofsEnd.set(ofsList[i], ofsList[i + 1] ?? Infinity);
 		}
 	}
 
-	async materializeOffset(offset: number): Promise<Buffer | undefined> {
-		let next = this.ofsLink.get(offset);
-
-		if (next === undefined) {
-			return;
-		}
-
-		const handle = await open(this.packPath);
-
-		if (next === Infinity) {
-			const stats = await handle.stat();
-			next = stats.size;
-		}
-
-		const buffer = Buffer.alloc(next - offset);
-		await handle.read({ buffer, position: offset });
-
-		await handle.close();
-
-		return buffer;
-	}
-
-	async materializeHash(
-		hash: string,
-	): Promise<{ offset: number; buffer: Buffer } | undefined> {
+	async queryHash(hash: string): Promise<Packed | undefined> {
 		const offset = this.ofsMap.get(hash);
 
 		if (offset === undefined) {
-			return;
+			return undefined;
 		}
 
-		const buffer = await this.materializeOffset(offset);
+		return await this.queryOffset(offset);
+	}
 
-		if (buffer === undefined) {
-			return;
+	async queryOffset(offset: number): Promise<Packed | undefined> {
+		let end = this.ofsEnd.get(offset);
+
+		if (end === undefined) {
+			return undefined;
 		}
+
+		const handle = await open(this.pack);
+
+		if (end === Infinity) {
+			const stats = await handle.stat();
+			end = stats.size;
+		}
+
+		const buffer = Buffer.alloc(end - offset);
+
+		await handle.read(buffer, { position: offset });
+		await handle.close();
 
 		return { offset, buffer };
 	}
