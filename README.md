@@ -1,5 +1,5 @@
 <h3 align="center">
-	<img src="https://raw.githubusercontent.com/CarbonicSoda/neogit/master/media/icon.png" width="130" alt="NeoGit Icon" /><br />
+	<img src="https://raw.githubusercontent.com/wavim/neogit/master/media/icon.png" width="130" alt="NeoGit Icon" /><br />
 	NeoGit
 </h3>
 <h4 align="center">Git Isometry for Node.js</h4>
