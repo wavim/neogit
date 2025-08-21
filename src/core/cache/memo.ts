@@ -1,14 +1,14 @@
 export class Memo<T> {
-	readonly store = new Map<string, T>();
+	store = new Map<string, T>();
 
-	async memo(resolve: () => Promise<T>, repo: string): Promise<T> {
+	async memo(f: () => Promise<T>, repo: string): Promise<T> {
 		const memoized = this.store.get(repo);
 
 		if (memoized) {
 			return memoized;
 		}
 
-		const data = await resolve();
+		const data = await f();
 		this.store.set(repo, data);
 
 		return data;

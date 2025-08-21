@@ -1,17 +1,13 @@
 export class Bloom {
-	readonly mask = 0n;
+	bit: boolean[] = [];
 
 	constructor(entries: string[]) {
 		for (const hex of entries) {
-			this.mask |= mask(hex);
+			this.bit[+`0x${hex}`] = true;
 		}
 	}
 
 	negative(hex: string): boolean {
-		return !(this.mask & mask(hex));
+		return !this.bit[+`0x${hex}`];
 	}
-}
-
-function mask(hex: string): bigint {
-	return 1n << BigInt(`0x${hex.slice(0, 2)}`);
 }
