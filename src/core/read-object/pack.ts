@@ -1,4 +1,5 @@
-import { open } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 
 export interface Packed {
 	offset: number;
@@ -7,7 +8,15 @@ export interface Packed {
 
 export class Pack {
 	readonly ofsMap = new Map<string, number>();
-	readonly objLen = new Map<number, number>();
+	readonly lenMap = new Map<number, number>();
+
+	static async build(base: string, pack: string): Promise<Pack> {
+		const _pack = join(base, pack);
+		const index = join(base, pack.replace(".pack", ".idx"));
+		const stats = await stat(join(base, pack));
+
+		return new Pack(await readFile(index), _pack, stats.size);
+	}
 
 	constructor(
 		index: Buffer,
@@ -40,12 +49,12 @@ export class Pack {
 			const ofs = ofsLinked[i];
 			const end = ofsLinked[i + 1] ?? packSize;
 
-			this.objLen.set(ofs, end - ofs);
+			this.lenMap.set(ofs, end - ofs);
 		}
 	}
 
 	async readOfs(offset: number): Promise<Packed | undefined> {
-		const objLen = this.objLen.get(offset);
+		const objLen = this.lenMap.get(offset);
 
 		if (objLen === undefined) {
 			return undefined;
