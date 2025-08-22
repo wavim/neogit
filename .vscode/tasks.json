@@ -1,1 +1,7 @@
-{ "version": "2.0.0", "tasks": [{ "type": "npm", "script": "build", "group": "build" }] }
+{
+	"version": "2.0.0",
+	"tasks": [
+		{ "type": "npm", "script": "build", "group": "build" },
+		{ "type": "npm", "script": "watch" }
+	]
+}
