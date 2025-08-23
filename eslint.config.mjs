@@ -21,6 +21,14 @@ export default tslint.config(
 	},
 	tslint.configs.strictTypeChecked,
 	tslint.configs.stylisticTypeChecked,
+	{
+		rules: {
+			"@typescript-eslint/restrict-template-expressions": [
+				"error",
+				{ allowNumber: true },
+			],
+		},
+	},
 
 	stylistic.configs.recommended,
 	prettier,
