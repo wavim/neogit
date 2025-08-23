@@ -1,87 +1,68 @@
-import { parseObject } from "./parse-object";
+import { body } from "./body";
 
 export interface Commit {
 	tree: string;
-
-	parents: string[];
-
+	parent: string[];
 	author: CommitMeta;
 	committer: CommitMeta;
-
 	message: string;
 }
-
 interface CommitMeta {
 	name: string;
-	email: string;
-
-	timestamp: number;
-	timezone: number;
+	mail: string;
+	time: number;
+	zone: number;
 }
 
+const metaRegEx =
+	/^tree (?<tree>[0-9a-f]{40})\n(?<parent>(?:parent [0-9a-f]{40}\n)*)author (?<aname>.+?) <(?<amail>.*?)> (?<atime>\d+) (?<azone>[+-]\d{4})\ncommitter (?<cname>.+?) <(?<cmail>.*?)> (?<ctime>\d+) (?<czone>[+-]\d{4})/;
+
 export function parseCommit(buffer: Buffer): Commit {
-	const payload = parseObject(buffer, "commit").toString();
+	const commit = body(buffer, "commit").toString();
+	const parsed = metaRegEx.exec(commit);
 
-	const reTree = "tree (?<tree>[0-9a-f]{40})";
-
-	const reParents = "(?<parents>(?:parent [0-9a-f]{40}\n)*)";
-
-	const reAuthor =
-		"author (?<aname>.+?) <(?<aemail>[^>]*)> (?<atimestamp>\\d+) (?<atimezone>[+-]\\d{4})";
-	const reCommitter =
-		"committer (?<cname>.+?) <(?<cemail>[^>]*)> (?<ctimestamp>\\d+) (?<ctimezone>[+-]\\d{4})";
-
-	const head = new RegExp(`^${reTree}\n${reParents}${reAuthor}\n${reCommitter}`).exec(
-		payload,
-	);
-
-	if (head === null) {
+	if (!parsed) {
 		throw new Error("corrupt commit object");
 	}
 
-	const groups = head.groups as Record<
+	const groups = parsed.groups as Record<
 		| "tree"
-		| "parents"
+		| "parent"
 		| "aname"
-		| "aemail"
-		| "atimestamp"
-		| "atimezone"
+		| "amail"
+		| "atime"
+		| "azone"
 		| "cname"
-		| "cemail"
-		| "ctimestamp"
-		| "ctimezone",
+		| "cmail"
+		| "ctime"
+		| "czone",
 		string
 	>;
 
 	return {
 		tree: groups.tree,
-
-		parents: groups.parents
+		parent: groups.parent
 			.split("\n")
 			.slice(0, -1)
-			.map((line) => line.slice(7)),
-
+			.map((parent) => parent.slice(7)),
 		author: {
 			name: groups.aname,
-			email: groups.aemail,
-
-			timestamp: +groups.atimestamp,
-			timezone: timezone(groups.atimezone),
+			mail: groups.amail,
+			time: +groups.atime,
+			zone: zone(groups.azone),
 		},
 		committer: {
 			name: groups.cname,
-			email: groups.cemail,
-
-			timestamp: +groups.ctimestamp,
-			timezone: timezone(groups.ctimezone),
+			mail: groups.cmail,
+			time: +groups.ctime,
+			zone: zone(groups.czone),
 		},
-
-		message: payload.slice(head[0].length).trimStart(),
+		message: commit.slice(parsed[0].length).trimStart(),
 	};
 }
 
-function timezone(raw: string): number {
-	const minutes = +raw.slice(1, 3) * 60 + +raw.slice(3);
+const zone = (string: string) => {
+	const minutes = +string.slice(1, 3) * 60 + +string.slice(3);
 
-	return raw.startsWith("+") ? -minutes : minutes;
-}
+	return string.startsWith("+") ? -minutes : minutes;
+};
