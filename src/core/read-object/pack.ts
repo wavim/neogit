@@ -23,15 +23,13 @@ export class Pack {
 		readonly pack: string,
 		packSize: number,
 	) {
-		const firstFan = index.subarray(8, 1032);
-		const oidCount = firstFan.readUint32BE(1020);
+		const oidNumber = index.readUint32BE(1028);
+		const oidLookup = index.subarray(1032, 1032 + oidNumber * 20);
+		const ofsLookup = index.subarray(1032 + oidNumber * 24, 1032 + oidNumber * 28);
 
-		const oidLookup = index.subarray(1032, 1032 + oidCount * 20);
-		const ofsLookup = index.subarray(1032 + oidCount * 24, 1032 + oidCount * 28);
+		const ofsLinked = new Uint32Array(oidNumber);
 
-		const ofsLinked = new Uint32Array(oidCount);
-
-		for (let i = 0; i < oidCount; i++) {
+		for (let i = 0; i < oidNumber; i++) {
 			const oid = oidLookup.toString("hex", i * 20, i * 20 + 20);
 			const ofs = ofsLookup.readUint32BE(i * 4);
 
@@ -45,7 +43,7 @@ export class Pack {
 		}
 		ofsLinked.sort();
 
-		for (let i = 0; i < oidCount; i++) {
+		for (let i = 0; i < oidNumber; i++) {
 			const ofs = ofsLinked[i];
 			const end = ofsLinked[i + 1] ?? packSize;
 
