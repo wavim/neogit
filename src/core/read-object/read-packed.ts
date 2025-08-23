@@ -49,7 +49,7 @@ async function read(pack: Pack, packed: Packed): Promise<Buffer> {
 		throw ENOOBJ;
 	}
 
-	const size = (header & 0b1111) | (decLen(buffer, offset) << 4);
+	const size = (header & 0b1111) | (header & 0x80 && decLen(buffer, offset) << 4);
 
 	if (type !== "ofs-delta") {
 		const head = Buffer.from(`${type} ${size}\0`, "ascii");
@@ -86,7 +86,7 @@ function buildDeltas(base: Buffer, instructs: Buffer): Buffer {
 	const deltas = [];
 
 	while (instructs.byteLength !== 0) {
-		const instruction = instructs.readUint8(0);
+		const instruction = instructs.readUint8();
 
 		if ((instruction & 0x80) === 0) {
 			const size = instruction & 0x7f;
@@ -100,10 +100,10 @@ function buildDeltas(base: Buffer, instructs: Buffer): Buffer {
 		const byteMask = instruction & 0x7f;
 		const byteOffset: Offset = { _: 1 };
 
-		const ofs = decCpy(instructs, byteOffset, byteMask);
-		const len = decCpy(instructs, byteOffset, byteMask >> 4);
+		const offset = decCpy(instructs, byteOffset, byteMask);
+		const length = decCpy(instructs, byteOffset, byteMask >> 4);
 
-		deltas.push(base.subarray(ofs, ofs + len));
+		deltas.push(base.subarray(offset, offset + length));
 		instructs = instructs.subarray(byteOffset._);
 	}
 
@@ -130,7 +130,7 @@ function decOfs(buf: Buffer, ofs: Offset): number {
 
 	while (b & 0x80) {
 		b = buf.readUint8(ofs._++);
-		x = ((x + 1) << 7) | (b & 0x7f);
+		x = (b & 0x7f) | ((x + 1) << 7);
 	}
 
 	return x;
