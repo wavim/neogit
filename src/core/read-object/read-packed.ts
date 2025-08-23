@@ -79,10 +79,10 @@ async function read(pack: Pack, packed: Packed): Promise<Buffer> {
 	const objectHead = Buffer.from(`${objectType} ${objectSize}\0`, "ascii");
 	const objectBody = buildDeltas(base.subarray(terminator + 1), instructs);
 
-	return Buffer.concat([objectHead, objectBody]);
+	return Buffer.concat([objectHead, ...objectBody]);
 }
 
-function buildDeltas(base: Buffer, instructs: Buffer): Buffer {
+function buildDeltas(base: Buffer, instructs: Buffer): Buffer[] {
 	const deltas = [];
 
 	while (instructs.byteLength !== 0) {
@@ -107,7 +107,7 @@ function buildDeltas(base: Buffer, instructs: Buffer): Buffer {
 		instructs = instructs.subarray(byteOffset._);
 	}
 
-	return Buffer.concat(deltas);
+	return deltas;
 }
 
 function decLen(buf: Buffer, ofs: Offset): number {
