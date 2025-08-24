@@ -4,7 +4,7 @@ export class Memo<T> {
 	async memo(f: () => Promise<T>, repo: string): Promise<T> {
 		const memoized = this.store.get(repo);
 
-		if (memoized) {
+		if (memoized !== undefined) {
 			return memoized;
 		}
 

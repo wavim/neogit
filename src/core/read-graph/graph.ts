@@ -4,10 +4,14 @@ import { join } from "node:path";
 export class Graph {
 	readonly genMap = new Map<string, number>();
 
-	static async build(repo: string): Promise<Graph> {
+	static async build(repo: string): Promise<Graph | null> {
 		const path = join(repo, ".git", "objects", "info", "commit-graph");
 
-		return new Graph(await readFile(path));
+		try {
+			return new Graph(await readFile(path));
+		} catch {
+			return null;
+		}
 	}
 
 	constructor(graph: Buffer) {
