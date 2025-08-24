@@ -1,7 +1,7 @@
 {
 	"name": "neogit",
 	"author": "wavim",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Git Isometry for Node.js",
 	"lint-staged": {
 		"*.ts": [
@@ -9,12 +9,15 @@
 			"prettier --write"
 		]
 	},
-	"repository": "github:wavim/neogit",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/wavim/neogit.git"
+	},
 	"license": "MIT",
 	"keywords": [
 		"git",
-		"iso",
-		"node"
+		"node",
+		"isomorphic"
 	],
 	"main": "dist/index.cjs",
 	"module": "dist/index.mjs",

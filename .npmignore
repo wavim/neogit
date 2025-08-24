@@ -2,3 +2,4 @@
 src
 media
 *config.*
+pnpm*.yaml
