@@ -8,7 +8,7 @@ export interface ReadGraphCache {
 	graph: Memo<Graph | null>;
 }
 
-export async function getGeneration(
+export async function getTopology(
 	repo: string,
 	hash: string,
 
@@ -28,7 +28,7 @@ export async function getGeneration(
 	if (!parent.length) {
 		return 1;
 	}
-	const lower = await Promise.all(parent.map((hash) => getGeneration(repo, hash, cache)));
+	const lower = await Promise.all(parent.map((hash) => getTopology(repo, hash, cache)));
 
 	gen = Math.max(...lower) + 1;
 	graph?.genMap.set(hash, gen);
@@ -36,7 +36,7 @@ export async function getGeneration(
 	return gen;
 }
 
-export async function getParents(
+export async function findParents(
 	repo: string,
 	hash: string,
 

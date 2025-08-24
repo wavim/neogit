@@ -1,4 +1,5 @@
-export { diffCommit } from "./api/diff-commit";
+export { diffCommits } from "./api/diff-commits";
 export { findParents } from "./api/find-parents";
+export { mergeBases } from "./api/merge-base";
 export { readCommit } from "./api/read-object";
 export { Cache } from "./lib/cache/cache";
