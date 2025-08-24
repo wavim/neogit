@@ -32,3 +32,24 @@ export async function getGeneration(
 
 	return Math.max(...lower) + 1;
 }
+
+export async function getParents(
+	repo: string,
+	hash: string,
+
+	cache = new Cache(),
+): Promise<string[]> {
+	const graph = await cache.graph.memo(() => Graph.build(repo), repo);
+
+	const pts = graph?.findPts(hash);
+
+	if (pts === null) {
+		return [];
+	}
+	if (!pts) {
+		const commit = await readObject(repo, hash, cache);
+
+		return parseCommit(commit).parent;
+	}
+	return [pts];
+}
