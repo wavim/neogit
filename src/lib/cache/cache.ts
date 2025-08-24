@@ -7,6 +7,6 @@ import { Memo } from "./memo";
 
 export class Cache implements ReadObjectCache, ReadGraphCache {
 	readonly bloom = new Memo<Bloom>();
+	readonly graph = new Memo<Graph>();
 	readonly packs = new Memo<Pack[]>();
-	readonly graph = new Memo<Graph | null>();
 }

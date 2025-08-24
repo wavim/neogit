@@ -5,7 +5,7 @@ import { readObject } from "../read-object/read-object";
 import { Graph } from "./graph";
 
 export interface ReadGraphCache {
-	graph: Memo<Graph | null>;
+	graph: Memo<Graph>;
 }
 
 export async function getTopology(
@@ -16,10 +16,10 @@ export async function getTopology(
 ): Promise<number> {
 	const graph = await cache.graph.memo(() => Graph.build(repo), repo);
 
-	let gen = graph?.findGen(hash);
+	let topo = graph.findGen(hash);
 
-	if (gen !== undefined) {
-		return gen;
+	if (topo !== undefined) {
+		return topo;
 	}
 
 	const commit = await readObject(repo, hash, cache);
@@ -28,12 +28,12 @@ export async function getTopology(
 	if (!parent.length) {
 		return 1;
 	}
-	const lower = await Promise.all(parent.map((hash) => getTopology(repo, hash, cache)));
+	const last = await Promise.all(parent.map((hash) => getTopology(repo, hash, cache)));
 
-	gen = Math.max(...lower) + 1;
-	graph?.genMap.set(hash, gen);
+	topo = Math.max(...last) + 1;
+	graph.genMap.set(hash, topo);
 
-	return gen;
+	return topo;
 }
 
 export async function findParents(
@@ -44,7 +44,7 @@ export async function findParents(
 ): Promise<string[]> {
 	const graph = await cache.graph.memo(() => Graph.build(repo), repo);
 
-	const pts = graph?.findPts(hash);
+	const pts = graph.findPts(hash);
 
 	if (pts === null) {
 		return [];
