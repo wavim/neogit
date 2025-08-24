@@ -16,7 +16,7 @@ export async function getGeneration(
 ): Promise<number> {
 	const graph = await cache.graph.memo(() => Graph.build(repo), repo);
 
-	const gen = graph?.findGen(hash);
+	let gen = graph?.findGen(hash);
 
 	if (gen !== undefined) {
 		return gen;
@@ -30,7 +30,10 @@ export async function getGeneration(
 	}
 	const lower = await Promise.all(parent.map((hash) => getGeneration(repo, hash, cache)));
 
-	return Math.max(...lower) + 1;
+	gen = Math.max(...lower) + 1;
+	graph?.genMap.set(hash, gen);
+
+	return gen;
 }
 
 export async function getParents(
