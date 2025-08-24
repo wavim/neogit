@@ -34,8 +34,9 @@ extensions. It provides a lightweight yet performant alternative to NodeGit when
 is not a primary concern.
 
 Developed for [VSCode Git Branch](https://github.com/wavim/vscode-git-branch), this library focuses
-on a core set of Git features and is not a full implementation of all Git capabilities. Therefore
-API is not documented, plus I'm particularly lazy (it should be self-documenting).
+on a core set of Git features and is not a full implementation of all Git capabilities (but could be
+done rather easily). Therefore API is not documented, plus I'm particularly lazy (it should be
+self-documenting).
 
 ---
 

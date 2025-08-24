@@ -7,3 +7,4 @@ export { mergeBases } from "./api/merge-bases";
 export { readCommit } from "./api/read-object";
 export { searchRepo } from "./api/search-repo";
 export { Cache } from "./lib/cache/cache";
+export { type Commit } from "./lib/parse-object/parse-commit";

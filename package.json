@@ -1,7 +1,7 @@
 {
 	"name": "neogit",
 	"author": "wavim",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Git Isometry for Node.js",
 	"lint-staged": {
 		"*.ts": [
