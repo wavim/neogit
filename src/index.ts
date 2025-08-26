@@ -1,4 +1,3 @@
-export { diffCommits } from "./api/diff-commits";
 export { findParents } from "./api/find-parents";
 export { getBranches } from "./api/get-branches";
 export { headBranch } from "./api/head-branch";
