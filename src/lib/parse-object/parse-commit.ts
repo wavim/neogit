@@ -1,10 +1,11 @@
 import { body } from "./body";
 
 export interface Commit {
+	hash: string;
 	tree: string;
 	parent: string[];
 	author: CommitMeta;
-	committer: CommitMeta;
+	commit: CommitMeta;
 	message: string;
 }
 interface CommitMeta {
@@ -17,7 +18,7 @@ interface CommitMeta {
 const metaRegEx =
 	/^tree (?<tree>[0-9a-f]{40})\n(?<parent>(?:parent [0-9a-f]{40}\n)*)author (?<aname>.+?) <(?<amail>.*?)> (?<atime>\d+) (?<azone>[+-]\d{4})\ncommitter (?<cname>.+?) <(?<cmail>.*?)> (?<ctime>\d+) (?<czone>[+-]\d{4})/;
 
-export function parseCommit(buffer: Buffer): Commit {
+export function parseCommit(buffer: Buffer): Omit<Commit, "hash"> {
 	const commit = body(buffer, "commit").toString();
 	const parsed = metaRegEx.exec(commit);
 
@@ -51,7 +52,7 @@ export function parseCommit(buffer: Buffer): Commit {
 			time: +groups.atime,
 			zone: zone(groups.azone),
 		},
-		committer: {
+		commit: {
 			name: groups.cname,
 			mail: groups.cmail,
 			time: +groups.ctime,
@@ -62,7 +63,9 @@ export function parseCommit(buffer: Buffer): Commit {
 }
 
 const zone = (string: string) => {
-	const minutes = +string.slice(1, 3) * 60 + +string.slice(3);
+	const h = +string.slice(1, 3);
+	const m = +string.slice(3);
+	const z = h * 60 + m;
 
-	return string.startsWith("+") ? -minutes : minutes;
+	return string.startsWith("+") ? -z : z;
 };

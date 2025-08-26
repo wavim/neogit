@@ -8,5 +8,5 @@ export async function readCommit(
 
 	cache = new Cache(),
 ): Promise<Commit> {
-	return parseCommit(await readObject(repo, hash, cache));
+	return { hash, ...parseCommit(await readObject(repo, hash, cache)) };
 }

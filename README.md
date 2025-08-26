@@ -27,7 +27,7 @@ addressing several issues (i.e.
 
 IsoGit caches many things, including entire Git object packs (potentially massive). In contrast,
 NeoGit takes a minimal and deliberate approach to caching. While caching much less data, NeoGit
-still outperforms IsoGit by a factor of 2x in many scenarios.
+still outperforms IsoGit by a factor of 2x in many scenarios (>3x in graph-based operations).
 
 NeoGit is suitable for environments where native modules are not supported, such as VSCode
 extensions. It provides a lightweight yet performant alternative to NodeGit when cache invalidation
